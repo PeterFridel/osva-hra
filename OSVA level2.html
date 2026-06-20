@@ -26,6 +26,7 @@
     background: rgba(8, 12, 20, 0.95); border: 1px solid #f05050; padding: 30px;
     border-radius: 6px; text-align: center; display: none; pointer-events: auto;
     box-shadow: 0 0 50px rgba(240, 80, 80, 0.3); max-width: 650px; z-index: 100;
+    max-height: 88vh; overflow-y: auto;
   }
   .dialog-title { font-size: 18px; margin-bottom: 15px; letter-spacing: 2px; }
   .dialog-text { font-size: 14px; line-height: 1.6; color: #a0b8d0; margin-bottom: 25px; }
@@ -46,6 +47,10 @@
     #legend { display: none; }
     .metric { font-size: 12px; margin-bottom: 5px; }
     #btn-difficulty { top: calc(12px + env(safe-area-inset-top)); }
+    .dialog-box { width: calc(100% - 20px); max-width: 480px; padding: 18px; }
+    .dialog-title { font-size: 16px; margin-bottom: 10px; }
+    .dialog-text { font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+    button { padding: 12px; font-size: 12px; }
   }
 
   #btn-difficulty {

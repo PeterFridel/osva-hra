@@ -27,6 +27,7 @@
     background: rgba(8, 12, 20, 0.96); border: 1px solid #3a9fef; padding: 26px;
     border-radius: 6px; text-align: center; display: none; pointer-events: auto;
     box-shadow: 0 0 40px rgba(58, 159, 239, 0.3); max-width: 600px; width: 92%; z-index: 100;
+    max-height: 88vh; overflow-y: auto;
   }
   .dialog-title { color: #3ef0a0; font-size: 18px; margin-bottom: 15px; letter-spacing: 2px; }
   .dialog-text { font-size: 14px; line-height: 1.6; color: #a0b8d0; margin-bottom: 25px; }
@@ -52,6 +53,10 @@
     #ui-layer { padding-top: calc(10px + env(safe-area-inset-top)); }
     .metric { font-size: 12px; margin-bottom: 5px; }
     #tutorial-msg { top: calc(122px + env(safe-area-inset-top)); font-size: 13px; padding: 10px 16px; }
+    .dialog-box { width: calc(100% - 20px); max-width: 480px; padding: 18px; }
+    .dialog-title { font-size: 16px; margin-bottom: 10px; }
+    .dialog-text { font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+    button { padding: 12px; font-size: 12px; }
   }
 
   #btn-gear {
