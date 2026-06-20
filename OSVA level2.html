@@ -2,13 +2,15 @@
 <html lang="sk">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>OSVA: Level 2 - Narušenie Helixu v2.7</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #020408; color: #e0e8f0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; }
-  canvas { display: block; width: 100%; height: 100%; }
-  
-  #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; padding: 20px; }
+  body { background: #020408; color: #e0e8f0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none;
+    padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 20px calc(20px + env(safe-area-inset-left)); }
   .metric { font-size: 14px; margin-bottom: 8px; letter-spacing: 1px; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
   .val { font-weight: bold; }
   
@@ -37,8 +39,13 @@
   .btn-osva:hover { background: rgba(62,240,160,0.1); border-color: #50ffb0; }
 
   #legend {
-    position: absolute; bottom: 20px; left: 20px; font-size: 11px; color: #6a8a9a; 
+    position: absolute; bottom: 20px; left: 20px; font-size: 11px; color: #6a8a9a; pointer-events: none;
     background: rgba(0,0,0,0.5); padding: 10px; border-radius: 4px; border: 1px solid #1a2a3a;
+  }
+  @media (max-width: 680px), (pointer: coarse) {
+    #legend { display: none; }
+    .metric { font-size: 12px; margin-bottom: 5px; }
+    #btn-difficulty { top: calc(12px + env(safe-area-inset-top)); }
   }
 
   #btn-difficulty {
@@ -119,10 +126,17 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 let W, H;
 
-function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+let DPR;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
 window.addEventListener('resize', resize); resize();
 
-let gameSpeed = 0.6; 
+let gameSpeed = 0.6;
 let isBeginner = true;
 
 function toggleDifficulty() {
@@ -160,6 +174,55 @@ window.addEventListener('keydown', e => {
   if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ===== MOBILNÉ DOTYKOVÉ OVLÁDANIE (4. tlačidlo = ŠTÍT / Space) =====
+let steerSide = 'R';
+try { const s = JSON.parse(localStorage.getItem('osva_settings') || '{}'); if (s.steerSide) steerSide = s.steerSide; } catch (e) {}
+function ctrlZones() {
+  const r = Math.max(34, Math.min(W, H) * 0.085);
+  const pad = r * 0.9 + 16, by = H - r - 22, gap = r * 2.3;
+  const right = steerSide === 'R';
+  const sx = right ? W - pad - r : pad + r, dir = right ? -1 : 1;
+  const a = { x: sx, y: by }, b = { x: sx + dir * gap, y: by };
+  let Lb, Rb; if (a.x < b.x) { Lb = a; Rb = b; } else { Lb = b; Rb = a; }
+  const tx = right ? pad + r : W - pad - r;
+  return { Lb, Rb, thrust: { x: tx, y: by }, action: { x: tx, y: by - (2 * r + 30) }, r };
+}
+function zoneAt(x, y) {
+  const z = ctrlZones(), hit = z.r * 1.3;
+  if (Math.hypot(x - z.action.x, y - z.action.y) < hit) return 'action';
+  if (Math.hypot(x - z.thrust.x, y - z.thrust.y) < hit) return 'thrust';
+  if (Math.hypot(x - z.Lb.x, y - z.Lb.y) < hit) return 'left';
+  if (Math.hypot(x - z.Rb.x, y - z.Rb.y) < hit) return 'right';
+  return null;
+}
+function refreshTouch(e) {
+  e.preventDefault();
+  keys['ArrowLeft'] = keys['ArrowRight'] = keys['ArrowUp'] = keys['Space'] = false;
+  for (const t of e.touches) {
+    const z = zoneAt(t.clientX, t.clientY);
+    if (z === 'left') keys['ArrowLeft'] = true;
+    else if (z === 'right') keys['ArrowRight'] = true;
+    else if (z === 'thrust') keys['ArrowUp'] = true;
+    else if (z === 'action') keys['Space'] = true;
+  }
+}
+['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(ev => canvas.addEventListener(ev, refreshTouch, { passive: false }));
+function drawControls() {
+  if (Ship.state === 'landed') return;
+  const z = ctrlZones();
+  function b(c, g, on, cap) {
+    ctx.beginPath(); ctx.arc(c.x, c.y, z.r, 0, Math.PI * 2);
+    ctx.fillStyle = on ? 'rgba(62,240,160,0.22)' : 'rgba(20,30,45,0.30)'; ctx.fill();
+    ctx.strokeStyle = on ? '#3ef0a0' : 'rgba(120,160,200,0.5)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = on ? '#3ef0a0' : '#9fb8d0'; ctx.font = Math.round(z.r * 0.9) + 'px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g, c.x, c.y + 1);
+    if (cap) { ctx.font = '10px monospace'; ctx.fillStyle = '#7186a0'; ctx.fillText(cap, c.x, c.y + z.r + 11); }
+  }
+  b(z.Lb, '◀', keys['ArrowLeft']); b(z.Rb, '▶', keys['ArrowRight']);
+  b(z.thrust, '▲', keys['ArrowUp']); b(z.action, '◈', keys['Space'], 'ŠTÍT');
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
 
 let particles = [];
 for(let i=0; i<700; i++) {
@@ -466,19 +529,27 @@ function draw() {
     ctx.fillStyle = (Ship.Dt > 0.5) ? '#f05050' : '#00ffff'; ctx.fill();
   }
   ctx.restore();
+
+  drawControls();
 }
 
-function gameLoop() {
+// Fixný časový krok — fyzika 60×/s nezávisle od Hz displeja.
+let _lastT = performance.now(), _acc = 0;
+const STEP = 1 / 60;
+function gameLoop(now) {
+  if (now === undefined) now = performance.now();
+  let f = (now - _lastT) / 1000; _lastT = now;
+  if (!isFinite(f) || f < 0) f = STEP;
+  if (f > 0.25) f = 0.25;
+  _acc += f;
+  let g = 0;
   try {
-    updatePhysics();
+    while (_acc >= STEP && g++ < 5) { updatePhysics(); _acc -= STEP; }
     draw();
-    requestAnimationFrame(gameLoop);
-  } catch(e) {
-    console.error(e);
-  }
+  } catch (e) { console.error(e); }
+  requestAnimationFrame(gameLoop);
 }
-
-gameLoop();
+requestAnimationFrame(gameLoop);
 </script>
 </body>
 </html>
