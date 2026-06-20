@@ -224,10 +224,10 @@ window.addEventListener('keyup', e => {
 
 // dotykové zóny (prehoditeľná strana)
 function zones() {
-  const r = Math.max(42, Math.min(W, H) * 0.10);
-  const pad = r * 0.8 + 14;
-  const by = H - r - 40;            // zdvihnuté nad gesto-lištu telefónu
-  const gap = r * 2.25;
+  const r = Math.max(34, Math.min(W, H) * 0.085);
+  const pad = r * 0.9 + 16;
+  const by = H - r - 22 - (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sab')) || 0);
+  const gap = r * 2.3;
   const steerRight = settings.steerSide === 'R';
   const steerX = steerRight ? W - pad - r : pad + r;
   const dir = steerRight ? -1 : 1;
@@ -239,15 +239,11 @@ function zones() {
   return { leftBtn, rightBtn, thrust: { x: thrustX, y: by }, r };
 }
 function zoneAt(x, y) {
-  const z = zones(), hit = z.r * 1.5;   // veľkorysá dotyková plocha
-  // vyber NAJBLIŽŠiu zónu (zóny sa pri veľkej ploche môžu prekrývať)
-  const cand = [['thrust', z.thrust], ['left', z.leftBtn], ['right', z.rightBtn]];
-  let best = null, bd = hit;
-  for (const [name, c] of cand) {
-    const d = Math.hypot(x - c.x, y - c.y);
-    if (d < bd) { bd = d; best = name; }
-  }
-  return best;
+  const z = zones(), hit = z.r * 1.3;
+  if (Math.hypot(x - z.thrust.x, y - z.thrust.y) < hit) return 'thrust';
+  if (Math.hypot(x - z.leftBtn.x, y - z.leftBtn.y) < hit) return 'left';
+  if (Math.hypot(x - z.rightBtn.x, y - z.rightBtn.y) < hit) return 'right';
+  return null;
 }
 function refreshTouch(e) {
   if (menuOpen) return;
