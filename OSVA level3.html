@@ -39,18 +39,29 @@
   @media (max-width: 680px), (pointer: coarse) {
     #legend { display: none; }
     .metric { font-size: 12px; margin-bottom: 5px; }
-    #btn-difficulty { top: calc(12px + env(safe-area-inset-top)); }
+    #btn-difficulty { position: static; display: inline-block; margin-top: 10px; font-size: 11px; padding: 7px 11px; }
     .dialog-box { width: calc(100% - 20px); max-width: 480px; padding: 18px; }
     .dialog-title { font-size: 16px; margin-bottom: 10px; }
     .dialog-text { font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
     button { padding: 12px; font-size: 12px; }
+    #settings-panel button { padding: 12px 18px; }
   }
 
-  #btn-difficulty {
-    position: absolute; top: 20px; right: 20px; pointer-events: auto;
-    background: #1a2a3a; border: 1px solid #f0d040; color: #f0d040;
-    padding: 8px 15px; font-size: 12px; border-radius: 4px; cursor: pointer;
+  #btn-gear {
+    position: absolute; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right));
+    pointer-events: auto; background: #1a2a3a; border: 1px solid #4a7fa5; color: #cfe4ff;
+    padding: 7px 11px; font-size: 16px; border-radius: 6px; cursor: pointer; z-index: 120;
   }
+  #settings-panel {
+    position: absolute; inset: 0; display: none; z-index: 200; pointer-events: auto;
+    flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px;
+    background: radial-gradient(circle at 50% 40%, rgba(8,16,30,.7), rgba(2,4,8,.96));
+  }
+  #settings-panel.open { display: flex; }
+  #settings-panel .srow { display: flex; align-items: center; gap: 12px; }
+  #settings-panel .srow span { color: #80a0c0; min-width: 92px; text-align: right; font-size: 13px; }
+  #settings-panel button { width: auto; margin: 0; padding: 12px 18px; text-align: center; min-width: 110px; }
+  #set-close { margin-top: 22px; border-color: #3ef0a0; color: #3ef0a0; }
 
   #fact-hud {
     position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
@@ -70,8 +81,13 @@
   <div class="metric" style="color: #f05050;">Vnútorný Odpor (Dt): <span id="ui-dt" class="val">0.00</span></div>
   <div class="metric" style="color: #40aaff;">Vzdialenosť na Jupiter: <span id="ui-dist" class="val">---</span> km</div>
   <div class="metric" style="color: #a050f0; margin-top: 15px; font-size: 12px; display:none;" id="warn-hud">⚠ NEZNÁME PREKÁŽKY V DRÁHE</div>
-  
-  <button id="btn-difficulty" onclick="toggleDifficulty()">⏱️ Režim: Začiatočník (Pomalý)</button>
+</div>
+
+<button id="btn-gear" onclick="openSettings()">⚙</button>
+<div id="settings-panel">
+  <div class="srow"><span>Režim</span><button id="set-diff"></button></div>
+  <div class="srow"><span>Ovládanie</span><button id="set-steer"></button></div>
+  <button id="set-close" onclick="closeSettings()">Späť do hry</button>
 </div>
 
 <div id="fact-hud">Analýza dát Jupitera...</div>
@@ -147,12 +163,28 @@ window.addEventListener('resize', resize); resize();
 
 let gameSpeed = 0.6;
 let isBeginner = true;
+let menuOpen = false;
 
-function toggleDifficulty() {
-  isBeginner = !isBeginner;
-  gameSpeed = isBeginner ? 0.6 : 1.0;
-  document.getElementById('btn-difficulty').innerText = isBeginner ? "⏱️ Režim: Začiatočník (Pomalý)" : "⏱️ Režim: Profík (Rýchly)";
+// Nastavenia počas hry (⚙) — režim + strana ovládania, ako v leveli 1
+function saveSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('osva_settings') || '{}');
+    s.steerSide = steerSide; s.beginner = isBeginner;
+    localStorage.setItem('osva_settings', JSON.stringify(s));
+  } catch (e) {}
 }
+function refreshPanel() {
+  document.getElementById('set-diff').innerText = isBeginner ? 'Začiatočník' : 'Profík';
+  document.getElementById('set-steer').innerText = steerSide === 'R' ? 'Vpravo' : 'Vľavo';
+}
+function openSettings() { menuOpen = true; document.getElementById('settings-panel').classList.add('open'); refreshPanel(); }
+function closeSettings() { menuOpen = false; document.getElementById('settings-panel').classList.remove('open'); }
+document.getElementById('set-diff').addEventListener('click', function () {
+  isBeginner = !isBeginner; gameSpeed = isBeginner ? 0.6 : 1.0; saveSettings(); refreshPanel();
+});
+document.getElementById('set-steer').addEventListener('click', function () {
+  steerSide = (steerSide === 'R' ? 'L' : 'R'); saveSettings(); refreshPanel();
+});
 
 const jupiterFacts = [
   "SKENOVANIE DÁT: Rok = 4332.59 pozemských dní | Polomer = 69 911 km | Vzdialenosť = 5.203 AU",
@@ -201,7 +233,10 @@ window.addEventListener('keyup', e => { keys[e.code] = false; });
 
 // ===== MOBILNÉ DOTYKOVÉ OVLÁDANIE (4. tlačidlo = SCAN / Shift) =====
 let steerSide = 'R';
-try { const s = JSON.parse(localStorage.getItem('osva_settings') || '{}'); if (s.steerSide) steerSide = s.steerSide; } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem('osva_settings') || '{}');
+  if (s.steerSide) steerSide = s.steerSide;
+  if (typeof s.beginner === 'boolean') { isBeginner = s.beginner; gameSpeed = isBeginner ? 0.6 : 1.0; }
+} catch (e) {}
 function ctrlZones() {
   const r = Math.max(34, Math.min(W, H) * 0.085);
   const pad = r * 0.9 + 16, by = H - r - 22, gap = r * 2.3;
@@ -305,7 +340,7 @@ function resolveQuiz(isCorrect) {
 }
 
 function updatePhysics() {
-  if (Ship.state === 'paused' || Ship.state === 'landed' || Ship.state === 'quiz') return;
+  if (menuOpen || Ship.state === 'paused' || Ship.state === 'landed' || Ship.state === 'quiz') return;
 
   const dxJ = Jupiter.x - Ship.x, dyJ = Jupiter.y - Ship.y;
   const distJ = Math.sqrt(dxJ*dxJ + dyJ*dyJ);
