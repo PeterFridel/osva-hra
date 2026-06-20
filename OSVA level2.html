@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<title>OSVA: Level 2 - Narušenie Helixu v2.7</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #020408; color: #e0e8f0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; }
+  canvas { display: block; width: 100%; height: 100%; }
+  
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; padding: 20px; }
+  .metric { font-size: 14px; margin-bottom: 8px; letter-spacing: 1px; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
+  .val { font-weight: bold; }
+  
+  #tutorial-msg {
+    position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; color: #3ef0a0; letter-spacing: 1px; text-align: center;
+    background: rgba(10, 15, 25, 0.85); padding: 12px 24px; border-radius: 4px; border: 1px solid #3ef0a0;
+    transition: opacity 0.5s; text-shadow: 0 0 8px rgba(62, 240, 160, 0.4); display: none;
+  }
+
+  .dialog-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(8, 12, 20, 0.95); border: 1px solid #f05050; padding: 30px;
+    border-radius: 6px; text-align: center; display: none; pointer-events: auto;
+    box-shadow: 0 0 50px rgba(240, 80, 80, 0.3); max-width: 650px; z-index: 100;
+  }
+  .dialog-title { font-size: 18px; margin-bottom: 15px; letter-spacing: 2px; }
+  .dialog-text { font-size: 14px; line-height: 1.6; color: #a0b8d0; margin-bottom: 25px; }
+  button {
+    background: #111a24; border: 1px solid #2a4a6a; color: #80c0f0;
+    padding: 14px 15px; font-size: 13px; cursor: pointer; border-radius: 4px;
+    font-family: monospace; margin: 6px 0; width: 100%; transition: all 0.2s; text-align: left;
+  }
+  button:hover { background: #1a2a3a; border-color: #40aaff; box-shadow: 0 0 15px rgba(64,170,255,0.3); }
+  .btn-osva { border-color: #3ef0a0; color: #3ef0a0; }
+  .btn-osva:hover { background: rgba(62,240,160,0.1); border-color: #50ffb0; }
+
+  #legend {
+    position: absolute; bottom: 20px; left: 20px; font-size: 11px; color: #6a8a9a; 
+    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 4px; border: 1px solid #1a2a3a;
+  }
+
+  #btn-difficulty {
+    position: absolute; top: 20px; right: 20px; pointer-events: auto;
+    background: #1a2a3a; border: 1px solid #f0d040; color: #f0d040;
+    padding: 8px 15px; font-size: 12px; border-radius: 4px; cursor: pointer;
+  }
+  
+  #error-screen {
+    position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: #400000; color: white; padding: 40px; display: none; z-index: 9999;
+  }
+</style>
+</head>
+<body>
+
+<div id="error-screen"></div>
+<canvas id="gameCanvas"></canvas>
+
+<div id="tutorial-msg">KROK 2: Čeľ problému! Natoč nos lode na parazita a drž MEDZERNÍK v momente nárazu.</div>
+
+<div id="ui-layer">
+  <div style="color:#4a7fa5; font-size: 10px; margin-bottom: 15px; text-transform: uppercase;">L2: OCHRANA HRANÍC -> MARS</div>
+  <div class="metric" style="color: #3ef0a0;">Energia Koherencie: <span id="ui-ek" class="val">100.0</span>%</div>
+  <div class="metric" style="color: #f05050;">Vnútorný Odpor (Dt): <span id="ui-dt" class="val">0.00</span></div>
+  <div class="metric" style="color: #40aaff;">Vzdialenosť na Mars: <span id="ui-dist" class="val">---</span> km</div>
+  <div class="metric" style="color: #f05050; margin-top: 15px; font-size: 12px; display:none;" id="warn-hud">⚠ PARAZITICKÁ ENTROPIA NA BLÍZKU</div>
+  
+  <button id="btn-difficulty" onclick="toggleDifficulty()">⏱️ Režim: Začiatočník (Pomalý)</button>
+</div>
+
+<div id="legend">
+  <span style="color:#40aaff;">◖ Štít:</span> Medzerník (Držať)<br>
+  <span style="color:#f0d040;">⨀ Vektor:</span> Skutočný pohyb<br>
+  <span style="color:#ffffff;">◁ Radar:</span> Mars | <span style="color:#f05050;">◁ Hrozba</span><br>
+  <strong>Ovl:</strong> Šípky (Rotácia), HORE (Ťah)
+</div>
+
+<div id="martian-dialog" class="dialog-box" style="border-color:#f05050;">
+  <div class="dialog-title" style="color:#f05050;">ZÁSAH SYSTÉMU: OCHRANA HRANÍC</div>
+  <div class="dialog-text">
+    Do tvojej dráhy vstúpil parazitický systém. Sleduj červený radar. Tento chaos ťa bude otravovať a prenasledovať, kým si jasne nenastavíš hranicu.<br><br>
+    Neutekaj. Náraz energie, ktorý cítiš (Hnev), použi na obranu. Namier na problém a aktivuj Vektorový štít (Medzerník), aby si ho trvalo odrazil.
+  </div>
+  <button onclick="resolveMartian(0)" style="border-color:#f05050; color:#f05050;">1. [Hrubá sila] Budem ho ignorovať alebo pred ním utekať. (Riziko vyčerpania)</button>
+  <button class="btn-osva" onclick="resolveMartian(1)">2. [Geometria Vesmíru] Zastavím sa, natočím sa priamo na neho a odrazím ho štítom.</button>
+</div>
+
+<div id="approach-dialog" class="dialog-box" style="border-color:#40aaff;">
+  <div class="dialog-title" style="color:#40aaff;">ZÁSAH SYSTÉMU: ORBITA MARSU</div>
+  <div class="dialog-text">
+    Približuješ sa k Marsu s obrovskou zotrvačnosťou. Na bezpečné zachytenie musíš pochopiť mechaniku pohybu v priestore. <br><br>
+    <strong>Akým spôsobom si udržal stabilný kurz?</strong>
+  </div>
+  <button onclick="resolveApproach(0)" style="border-color:#f05050; color:#f05050;">1. [Hrubá sila] Sústredil som sa len na cieľ a letel priamo naň. (Aktivuje manuálne brzdy)</button>
+  <button class="btn-osva" onclick="resolveApproach(1)">2. [Geometria Vesmíru] Pochopil som rozdiel medzi mojím prúdom a cieľom. Zosúladil som ich. (Autonavigácia)</button>
+</div>
+
+<div id="win-dialog" class="dialog-box" style="border-color:#3ef0a0;">
+  <div class="dialog-title" style="color: #3ef0a0;">ZACHYTENIE ÚSPEŠNÉ</div>
+  <div class="dialog-text">
+    Vitaj na orbite Marsu.<br><br>
+    Úspešne si odrazil cudzí chaos (nastavil si hranicu) a nepriniesol si si ho do novej destinácie. Toto je presná definícia funkčného hnevu a koherencie.
+  </div>
+  <button class="btn-osva" style="text-align:center;" onclick="location.reload()">Dokončiť Simuláciu</button>
+</div>
+
+<script>
+window.onerror = function(msg, url, line) {
+  const errScreen = document.getElementById('error-screen');
+  if(errScreen) {
+    errScreen.style.display = 'block';
+    errScreen.innerHTML = `<h2>Kritická chyba:</h2><p>${msg}</p><p>Riadok: ${line}</p>`;
+  }
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+let gameSpeed = 0.6; 
+let isBeginner = true;
+
+function toggleDifficulty() {
+  isBeginner = !isBeginner;
+  gameSpeed = isBeginner ? 0.6 : 1.0;
+  document.getElementById('btn-difficulty').innerText = isBeginner ? "⏱️ Režim: Začiatočník (Pomalý)" : "⏱️ Režim: Profík (Rýchly)";
+}
+
+const Mars = { x: 0, y: -25000, mass: 4000, radius: 150 }; 
+
+const Ship = {
+  x: 0, y: 0,          
+  vx: 0, vy: -15.0,            
+  angle: -Math.PI/2,               
+  thrust: 0, Ek: 100, Dt: 0, I: 1.0, M: 0,
+  state: 'flying', // flying, paused, shield_aiming, auto_approach, manual_approach, landed
+  bankAngle: 0,
+  shieldActive: false,
+  hasTriggeredMartian: false,
+  hasTriggeredApproach: false
+};
+
+// Parazit začína neaktívny, spawne sa dynamicky
+const Probe = {
+  x: 0, y: 0, 
+  vx: 0, vy: 0, 
+  radius: 40,
+  active: false,
+  resolved: false // True = odrazený štítom (už neotravuje)
+};
+
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+let particles = [];
+for(let i=0; i<700; i++) {
+  particles.push({
+    x: (Math.random()-0.5)*15000,
+    y: (Math.random()-0.5)*15000,
+    z_height: (Math.random()-0.5)*6000,
+    speed: 0.5 + Math.random()*2
+  });
+}
+
+function project3D(x, y, z_height) {
+  const dx = x - Ship.x, dy = y - Ship.y;
+  const cosA = Math.cos(Ship.angle - Math.PI/2), sinA = Math.sin(Ship.angle - Math.PI/2);
+  const depth = dx * cosA + dy * sinA;
+  const right = dx * (-sinA) + dy * cosA;
+  const camZ = depth + 400; 
+  if (camZ < 10) return { s: -1 }; 
+  const scale = 700 / camZ;
+  return { 
+    px: W/2 + right * scale, 
+    py: H/2 - (z_height - 100) * scale, 
+    s: scale, 
+    alpha: parseFloat(Math.max(0, Math.min(1, 1 - (camZ / 14000))).toFixed(2)) 
+  };
+}
+
+function resolveMartian(choice) {
+  document.getElementById('martian-dialog').style.display = 'none';
+  Ship.state = 'shield_aiming';
+  if (choice === 1) {
+    document.getElementById('tutorial-msg').style.display = 'block';
+  }
+}
+
+function resolveApproach(choice) {
+  document.getElementById('approach-dialog').style.display = 'none';
+  Ship.state = choice === 1 ? 'auto_approach' : 'manual_approach';
+}
+
+function updatePhysics() {
+  if (Ship.state === 'paused' || Ship.state === 'landed') return;
+
+  const dxM = Mars.x - Ship.x, dyM = Mars.y - Ship.y;
+  const distM = Math.sqrt(dxM*dxM + dyM*dyM);
+  document.getElementById('ui-dist').innerText = Math.floor(distM);
+
+  // Dynamický Spawn Parazita
+  if (!Probe.active && distM < 18000) {
+    Probe.active = true;
+    Probe.x = Ship.x - 1500; 
+    Probe.y = Ship.y - 3000; // Vždy kúsok vpredu naľavo od lode
+  }
+
+  // Prekážka na Marse (Zablokované pristátie, ak parazit otravuje)
+  if (distM < 5000 && !Ship.hasTriggeredApproach) {
+    if (Probe.resolved) {
+      Ship.state = 'paused';
+      Ship.hasTriggeredApproach = true;
+      document.getElementById('approach-dialog').style.display = 'block';
+      keys['ArrowUp'] = false;
+    } else {
+      document.getElementById('warn-hud').innerText = "⚠ NEMOŽNO PRISTÁŤ: Zbav sa prenasledovateľa (Odraz ho štítom!)";
+      document.getElementById('warn-hud').style.display = 'block';
+      // Mierne odpudenie od Marsu, kým nevyrieši problém
+      Ship.vx += dxM * 0.0005; 
+      Ship.vy += dyM * 0.0005;
+    }
+    return;
+  }
+
+  if (distM < Mars.radius + 300 && Probe.resolved) {
+    Ship.state = 'landed';
+    document.getElementById('win-dialog').style.display = 'block';
+    return;
+  }
+
+  let targetBank = 0;
+  Ship.thrust = 0;
+
+  if (Ship.state === 'auto_approach') {
+    const targetA = Math.atan2(dyM, dxM);
+    Ship.vx += (Math.cos(targetA) * 6 - Ship.vx) * 0.05 * gameSpeed;
+    Ship.vy += (Math.sin(targetA) * 6 - Ship.vy) * 0.05 * gameSpeed;
+    Ship.vx *= 0.96; Ship.vy *= 0.96;
+    const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+    let diff = velocityAngle - Ship.angle;
+    while(diff < -Math.PI) diff += 2*Math.PI;
+    while(diff > Math.PI) diff -= 2*Math.PI;
+    Ship.angle += diff * 0.1;
+    Ship.thrust = 0.5; 
+  } else if (Ship.state === 'manual_approach') {
+    if (keys['ArrowLeft']) { Ship.angle -= 0.05; targetBank = -0.4; }
+    if (keys['ArrowRight']) { Ship.angle += 0.05; targetBank = 0.4; }
+    if (keys['ArrowUp']) Ship.thrust = 0.8; 
+    Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+    Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+    Ship.vx *= 0.94; Ship.vy *= 0.94; 
+  } else {
+    if (keys['ArrowLeft']) { Ship.angle -= 0.05; targetBank = -0.4; }
+    if (keys['ArrowRight']) { Ship.angle += 0.05; targetBank = 0.4; }
+    if (keys['ArrowUp']) Ship.thrust = 0.45;
+    Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+    Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+    Ship.vx *= 0.995; Ship.vy *= 0.995; 
+  }
+
+  Ship.bankAngle += (targetBank - Ship.bankAngle) * 0.1; 
+  Ship.shieldActive = keys['Space'];
+  
+  Ship.x += Ship.vx * gameSpeed; 
+  Ship.y += Ship.vy * gameSpeed;
+
+  // Logika prenasledujúceho Parazita
+  if(Probe.active) {
+    const dxP = Probe.x - Ship.x, dyP = Probe.y - Ship.y;
+    const distP = Math.sqrt(dxP*dxP + dyP*dyP);
+
+    if (!Probe.resolved) {
+      // Agresívny Homing (Prenasledovanie)
+      const angleToShip = Math.atan2(-dyP, -dxP);
+      // Parazit je vždy o kúsok rýchlejší ako loď, aby ťa dobehol
+      const baseSpeed = Math.sqrt(Ship.vx*Ship.vx + Ship.vy*Ship.vy) + 4;
+      Probe.vx += (Math.cos(angleToShip) * baseSpeed * gameSpeed - Probe.vx) * 0.05;
+      Probe.vy += (Math.sin(angleToShip) * baseSpeed * gameSpeed - Probe.vy) * 0.05;
+      
+      document.getElementById('warn-hud').style.display = 'block';
+
+      if(distP < 2500 && !Ship.hasTriggeredMartian) {
+        Ship.state = 'paused';
+        Ship.hasTriggeredMartian = true;
+        document.getElementById('martian-dialog').style.display = 'block';
+        keys['ArrowUp'] = false; keys['Space'] = false;
+      }
+    }
+
+    Probe.x += Probe.vx * gameSpeed; 
+    Probe.y += Probe.vy * gameSpeed;
+
+    // Kolízia (Parazit narazil do lode)
+    if(distP < Probe.radius + 40 && !Probe.resolved) {
+      const angleToProbe = Math.atan2(dyP, dxP);
+      let angleDiff = angleToProbe - Ship.angle;
+      while(angleDiff < -Math.PI) angleDiff += 2*Math.PI;
+      while(angleDiff > Math.PI) angleDiff -= 2*Math.PI;
+      
+      const isFacing = Math.abs(angleDiff) < 0.8; // Tolerancia 
+
+      if(Ship.shieldActive && isFacing) {
+        // OSVA: Dokonalý odraz (Trvalé vyriešenie)
+        Probe.resolved = true;
+        Probe.vx = Math.cos(angleToProbe) * 20; // Vystrelí preč
+        Probe.vy = Math.sin(angleToProbe) * 20; 
+        document.getElementById('tutorial-msg').style.display = 'none';
+        
+        const warn = document.getElementById('warn-hud');
+        warn.style.color = '#3ef0a0';
+        warn.innerText = "✓ HRANICA OCHRÁNENÁ. Parazit odklonený.";
+        setTimeout(() => { warn.style.display = 'none'; }, 3000);
+      } else {
+        // EGO: Zásah. Loď príde o energiu, parazit sa len odrazí a zaútočí znova
+        Ship.Ek -= 20; 
+        Ship.Dt += 0.5;
+        
+        // Fyzický náraz
+        Ship.vx += Probe.vx * 0.5; 
+        Ship.vy += Probe.vy * 0.5;
+        
+        // Parazit odskočí, ale zostáva "resolved = false", takže sa vráti!
+        Probe.vx = -Probe.vx * 1.5; 
+        Probe.vy = -Probe.vy * 1.5;
+        Probe.x += Probe.vx * 5; 
+        Probe.y += Probe.vy * 5;
+
+        // Smrť z vyčerpania
+        if (Ship.Ek <= 0) {
+          Ship.state = 'paused';
+          document.getElementById('warn-hud').innerText = "☠ VYČERPANIE SYSTÉMU. Reštartujem...";
+          setTimeout(() => location.reload(), 2000);
+        }
+      }
+    }
+  }
+
+  document.getElementById('ui-ek').innerText = Math.max(0, Ship.Ek).toFixed(1);
+  document.getElementById('ui-dt').innerText = Ship.Dt.toFixed(2);
+  document.getElementById('ui-ek').style.color = Ship.Ek > 50 ? '#3ef0a0' : '#f05050';
+}
+
+function draw() {
+  if (!W || !H) resize();
+  ctx.fillStyle = 'rgba(2, 4, 8, 0.4)'; 
+  ctx.fillRect(0, 0, W, H);
+
+  const chaosFactor = Ship.Dt * 10; 
+  ctx.lineWidth = 1.2;
+  
+  particles.forEach(p => {
+    let dx = p.x - Ship.x, dy = p.y - Ship.y;
+    if (dx > 7500) p.x -= 15000; else if (dx < -7500) p.x += 15000;
+    if (dy > 7500) p.y -= 15000; else if (dy < -7500) p.y += 15000;
+
+    let px = p.x + (Math.random()-0.5) * chaosFactor;
+    let py = p.y + (Math.random()-0.5) * chaosFactor;
+
+    const pt0 = project3D(px, py, p.z_height);
+    const pt1 = project3D(px - Ship.vx*2, py - Ship.vy*2, p.z_height); 
+
+    if(pt0.s > 0 && pt1.s > 0) {
+      let hue = (Ship.Dt > 0.5) ? 0 : 190; 
+      ctx.strokeStyle = `hsla(${hue}, 100%, ${50 + p.speed*10}%, ${pt0.alpha})`;
+      ctx.beginPath(); ctx.moveTo(pt0.px, pt0.py); ctx.lineTo(pt1.px, pt1.py); ctx.stroke();
+    }
+  });
+
+  const mPt = project3D(Mars.x, Mars.y, 0); 
+  if (mPt.s > 0) {
+    const mRadius = Mars.radius * mPt.s;
+    ctx.beginPath(); ctx.arc(mPt.px, mPt.py, mRadius, 0, Math.PI*2);
+    const mGrd = ctx.createRadialGradient(mPt.px, mPt.py, 0, mPt.px, mPt.py, mRadius);
+    mGrd.addColorStop(0, `rgba(220, 80, 40, ${mPt.alpha})`);
+    mGrd.addColorStop(1, `rgba(100, 20, 10, ${mPt.alpha})`);
+    ctx.fillStyle = mGrd; ctx.fill();
+  }
+
+  if(Probe.active) {
+    const pPt = project3D(Probe.x, Probe.y, 0);
+    if(pPt.s > 0) {
+      const pRadius = Probe.radius * pPt.s;
+      
+      // Ak je vyriešený, je ticho modrý. Ak útočí, pulzuje na červeno.
+      if (Probe.resolved) {
+        ctx.beginPath(); ctx.arc(pPt.px, pPt.py, pRadius, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(100, 150, 200, ${pPt.alpha})`; ctx.fill();
+      } else {
+        // Pulzujúce chápadlá chaosu
+        const pulse = 1.2 + Math.sin(Date.now() / 100) * 0.3;
+        ctx.beginPath(); ctx.arc(pPt.px, pPt.py, pRadius * pulse, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(255, 40, 40, ${pPt.alpha * 0.4})`; ctx.fill();
+        
+        ctx.beginPath(); ctx.arc(pPt.px, pPt.py, pRadius, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(220, 20, 20, ${pPt.alpha})`; ctx.fill();
+      }
+    }
+  }
+
+  ctx.save();
+  ctx.translate(W/2, H/2 + 100); 
+
+  const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+  const relVelocityAngle = velocityAngle - Ship.angle + Math.PI/2; 
+  const velMag = Math.sqrt(Ship.vx*Ship.vx + Ship.vy*Ship.vy);
+  
+  ctx.save();
+  ctx.rotate(relVelocityAngle);
+  const driftDisplayDist = Math.min(velMag * 8, 80); 
+  ctx.beginPath();
+  ctx.arc(0, -driftDisplayDist, 6, 0, Math.PI*2);
+  ctx.moveTo(-10, -driftDisplayDist); ctx.lineTo(10, -driftDisplayDist);
+  ctx.moveTo(0, -driftDisplayDist-4); ctx.lineTo(0, -driftDisplayDist-10);
+  ctx.strokeStyle = 'rgba(240, 208, 64, 0.9)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+  
+  // Radar na Mars (Biely)
+  const targetAngle = Math.atan2(Mars.y - Ship.y, Mars.x - Ship.x);
+  const relTargetAngle = targetAngle - Ship.angle + Math.PI/2; 
+  ctx.save();
+  ctx.rotate(relTargetAngle);
+  ctx.beginPath(); ctx.moveTo(0, -65); ctx.lineTo(6, -50); ctx.lineTo(-6, -50); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
+  ctx.restore();
+
+  // Radar na Parazita (Červený)
+  if (Probe.active && !Probe.resolved) {
+    const threatAngle = Math.atan2(Probe.y - Ship.y, Probe.x - Ship.x);
+    const relThreatAngle = threatAngle - Ship.angle + Math.PI/2; 
+    ctx.save();
+    ctx.rotate(relThreatAngle);
+    ctx.beginPath(); ctx.moveTo(0, -75); ctx.lineTo(8, -85); ctx.lineTo(-8, -85); ctx.closePath();
+    ctx.fillStyle = 'rgba(255,40,40,0.9)'; ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.rotate(Ship.bankAngle);
+  const sScale = 20; 
+  
+  if(Ship.shieldActive) {
+    ctx.beginPath();
+    ctx.arc(0, -5, sScale * 2.5, Math.PI, 0); 
+    ctx.strokeStyle = '#3ef0a0';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+  
+  ctx.beginPath();
+  ctx.moveTo(0, -sScale); ctx.lineTo(sScale*0.7, sScale); ctx.lineTo(-sScale*0.7, sScale); ctx.closePath();
+  ctx.strokeStyle = (Ship.Dt > 0.5) ? '#f05050' : '#00ffff'; 
+  ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = 'rgba(10,15,25,0.9)'; ctx.fill();
+
+  if (Ship.thrust > 0) {
+    ctx.beginPath();
+    ctx.moveTo(0, sScale*1.2); ctx.lineTo(sScale*0.4, sScale*2.5 + Math.random()*10); ctx.lineTo(-sScale*0.4, sScale*2.5 + Math.random()*10); ctx.closePath();
+    ctx.fillStyle = (Ship.Dt > 0.5) ? '#f05050' : '#00ffff'; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function gameLoop() {
+  try {
+    updatePhysics();
+    draw();
+    requestAnimationFrame(gameLoop);
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+gameLoop();
+</script>
+</body>
+</html>

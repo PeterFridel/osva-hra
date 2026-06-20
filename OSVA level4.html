@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<title>OSVA: Level 4 - Pustenie Kontroly (Saturn) v4.1</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #010102; color: #e0e8f0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; }
+  canvas { display: block; width: 100%; height: 100%; }
+  
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; padding: 20px; }
+  .metric { font-size: 14px; margin-bottom: 8px; letter-spacing: 1px; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
+  .val { font-weight: bold; }
+  
+  .dialog-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(8, 12, 20, 0.95); border: 1px solid #40aaff; padding: 30px;
+    border-radius: 6px; text-align: center; display: none; pointer-events: auto;
+    box-shadow: 0 0 50px rgba(64, 170, 255, 0.3); max-width: 650px; z-index: 100;
+  }
+  .dialog-title { font-size: 18px; margin-bottom: 15px; letter-spacing: 2px; color: #40aaff; text-transform: uppercase; }
+  .dialog-text { font-size: 14px; line-height: 1.6; color: #a0c0d0; margin-bottom: 25px; }
+  button {
+    background: #111a24; border: 1px solid #2a4a6a; color: #80c0f0;
+    padding: 14px 15px; font-size: 13px; cursor: pointer; border-radius: 4px;
+    font-family: monospace; margin: 6px 0; width: 100%; transition: all 0.2s; text-align: left;
+  }
+  button:hover { background: #1a2a3a; border-color: #40aaff; box-shadow: 0 0 15px rgba(64,170,255,0.3); }
+  .btn-osva { border-color: #3ef0a0; color: #3ef0a0; }
+  .btn-osva:hover { background: rgba(62,240,160,0.1); border-color: #50ffb0; }
+
+  #legend {
+    position: absolute; bottom: 20px; left: 20px; font-size: 11px; color: #6a8a9a; 
+    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 4px; border: 1px solid #1a2a3a;
+  }
+  
+  #warn-hud {
+    position: absolute; top: 120px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; color: #f05050; letter-spacing: 2px; text-align: center;
+    background: rgba(20, 5, 5, 0.9); padding: 15px 30px; border-radius: 4px; border: 1px solid #f05050;
+    text-shadow: 0 0 10px rgba(240, 80, 80, 0.5); display: none;
+  }
+
+  #fact-hud {
+    position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; color: #d2c896; letter-spacing: 2px; text-align: center;
+    background: rgba(10, 15, 25, 0.9); padding: 15px 30px; border-radius: 4px; border: 1px solid #d2c896;
+    text-shadow: 0 0 10px rgba(210, 200, 150, 0.5); display: none; width: 80%; max-width: 800px;
+  }
+
+  #btn-difficulty {
+    position: absolute; top: 20px; right: 20px; pointer-events: auto;
+    background: #1a2a3a; border: 1px solid #f0d040; color: #f0d040;
+    padding: 8px 15px; font-size: 12px; border-radius: 4px; cursor: pointer;
+  }
+
+  #error-screen {
+    position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: #400000; color: white; padding: 40px; display: none; z-index: 9999;
+  }
+</style>
+</head>
+<body>
+
+<div id="error-screen"></div>
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-layer">
+  <div style="color:#4a7fa5; font-size: 10px; margin-bottom: 15px; text-transform: uppercase;">L4: HLBOKÝ VESMÍR -> SATURN</div>
+  <div class="metric" style="color: #3ef0a0;">Energia Koherencie: <span id="ui-ek" class="val">100.0</span>%</div>
+  <div class="metric" style="color: #f05050;">Vnútorný Odpor (Dt): <span id="ui-dt" class="val">0.00</span></div>
+  <div class="metric" style="color: #40aaff;">Vzdialenosť na Saturn: <span id="ui-dist" class="val">---</span> km</div>
+  <button id="btn-difficulty" onclick="toggleDifficulty()">⏱️ Režim: Začiatočník (Pomalý)</button>
+</div>
+
+<div id="warn-hud">⚠ KŔČ DETEGOVANÝ. PUSTI KONTROLU!</div>
+<div id="fact-hud">Analýza dát Saturnu...</div>
+
+<div id="legend">
+  <span style="color:#40aaff;">◎ Prstence:</span> Zóna nulového odporu (Pusti klávesnicu)<br>
+  <span style="color:#f0d040;">⨀ Vektor:</span> Skutočný pohyb<br>
+  <span style="color:#ffffff;">◁ Radar:</span> Saturn<br>
+  <strong>Ovl:</strong> Šípky (Rotácia), HORE (Ťah)
+</div>
+
+<div id="martian-dialog" class="dialog-box" style="border-color:#40aaff;">
+  <div class="dialog-title" style="color:#40aaff;">ZÁSAH SYSTÉMU: UVOĽNENIE ZOVRETIA</div>
+  <div class="dialog-text">
+    Približuješ sa k Saturnovým prstencom. Cítiš ťažobu a stratu hybnosti. Je to Smútok.<br><br>
+    Smútok nie je zlyhanie. Je to kauzálny mechanizmus na uvoľnenie zovretia. Prstence sú príliš husté na to, aby si cez ne preletel vlastnou snahou. Akákoľvek snaha o výkon ťa rozbije o prekážky. 
+  </div>
+  <button onclick="resolveMartian(0)" style="border-color:#f05050; color:#f05050;">1. [Hrubá sila] Budem kľučkovať a spoliehať sa na svoj výkon.</button>
+  <button class="btn-osva" onclick="resolveMartian(1)">2. [Geometria Vesmíru] Prestanem tlačiť na pílu. Úplne pustím klávesnicu a nechám sa unášať prúdom.</button>
+</div>
+
+<div id="approach-dialog" class="dialog-box" style="border-color:#d2c896;">
+  <div class="dialog-title" style="color:#d2c896;">ZÁSAH SYSTÉMU: PRIBLÍŽENIE K SATURNU</div>
+  <div class="dialog-text">
+    Prstence sú za tebou. Pred tebou je gravitačná studňa planéty. Letíš s obrovskou kinetickou energiou.<br><br>
+    <strong>Akým spôsobom chceš vykonať orbitálnu inzerkciu (pristátie)?</strong>
+  </div>
+  <button onclick="resolveApproach(0)" style="border-color:#f05050; color:#f05050;">1. [Hrubá sila] Manuálne brzdenie. Budem bojovať so zotrvačnosťou sám.</button>
+  <button class="btn-osva" onclick="resolveApproach(1)">2. [Geometria Vesmíru] Autonavigácia. Zladiť vektor na planétu a spustiť skenovanie faktov.</button>
+</div>
+
+<div id="quiz-dialog" class="dialog-box" style="border-color:#d2c896;">
+  <div class="dialog-title" style="color:#d2c896;">ZÁVEREČNÁ ANALÝZA DÁT</div>
+  <div class="dialog-text">
+    Skenovanie planéty dokončené.<br><br>
+    <strong>Otázka: Aká je najšpecifickejšia vlastnosť hustoty Saturnu?</strong>
+  </div>
+  <button onclick="resolveQuiz(0)">1. Je to najhustejšia planéta v sústave.</button>
+  <button onclick="resolveQuiz(0)">2. Má presne rovnakú hustotu ako Zem.</button>
+  <button onclick="resolveQuiz(1)">3. Je najmenej hustý — plával by na vode.</button>
+</div>
+
+<div id="win-dialog" class="dialog-box" style="border-color:#3ef0a0;">
+  <div class="dialog-title" id="win-title" style="color: #3ef0a0;">ZACHYTENIE ÚSPEŠNÉ</div>
+  <div class="dialog-text" id="win-text">
+    Vitaj na orbite Saturnu.<br><br>
+    Pochopil si, že najvyššou formou riadenia je niekedy nezasahovať. Prijal si smútok (uvoľnenie zovretia) a nechal si sa viesť väčším systémom.
+  </div>
+  <button class="btn-osva" style="text-align:center;" onclick="location.reload()">Dokončiť Simuláciu</button>
+</div>
+
+<script>
+window.onerror = function(msg, url, line) {
+  const errScreen = document.getElementById('error-screen');
+  if(errScreen) {
+    errScreen.style.display = 'block';
+    errScreen.innerHTML = `<h2>Kritická chyba:</h2><p>${msg}</p><p>Riadok: ${line}</p>`;
+  }
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+let gameSpeed = 0.6; 
+let isBeginner = true;
+
+function toggleDifficulty() {
+  isBeginner = !isBeginner;
+  gameSpeed = isBeginner ? 0.6 : 1.0;
+  document.getElementById('btn-difficulty').innerText = isBeginner ? "⏱️ Režim: Začiatočník (Pomalý)" : "⏱️ Režim: Profík (Rýchly)";
+}
+
+const saturnFacts = [
+  "SKENOVANIE DÁT: Rok = 10 759 pozemských dní | Polomer = 58 232 km | Vzdialenosť = 9.537 AU",
+  "FAKT: Prstence tvoria prevažne miliardy kúskov ľadu a kameňa.",
+  "FAKT: Najmenej hustá planéta v sústave — plávala by na vode.",
+  "FAKT: Má 146 známych mesiacov.",
+  "FAKT: Deň trvá len 10.7 hodín.",
+  "FAKT: Mesiac Titan je jediný s jazerami tekutého metánu na povrchu.",
+  "FAKT: Systém prstencov sa rozkladá do šírky až 280 000 km."
+];
+let factTimer = 0;
+
+const Saturn = { x: 0, y: -50000, mass: 9000, radius: 400 }; 
+const RING_OUTER = 32000;
+const RING_INNER = 14000;
+
+const Ship = {
+  x: 0, y: 0,          
+  vx: 0, vy: -20.0,            
+  angle: -Math.PI/2,               
+  thrust: 0, Ek: 100, Dt: 0, I: 1.0, M: 0,
+  state: 'flying', 
+  bankAngle: 0,
+  hasTriggeredMartian: false,
+  hasTriggeredApproach: false
+};
+
+const ringParticles = [];
+for(let i=0; i<2000; i++) {
+  const angle = Math.random() * Math.PI * 2;
+  const dist = RING_INNER + Math.random() * (RING_OUTER - RING_INNER);
+  ringParticles.push({
+    angle: angle,
+    dist: dist,
+    speed: 0.0005 + (RING_OUTER - dist) * 0.0000003,
+    size: 0.5 + Math.random() * 2.5
+  });
+}
+
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+let backgroundStars = [];
+for(let i=0; i<500; i++) {
+  backgroundStars.push({
+    x: (Math.random()-0.5)*20000,
+    y: (Math.random()-0.5)*20000,
+    z_height: (Math.random()-0.5)*8000
+  });
+}
+
+function project3D(x, y, z_height) {
+  const dx = x - Ship.x, dy = y - Ship.y;
+  const cosA = Math.cos(Ship.angle), sinA = Math.sin(Ship.angle);
+  const depth = dx * cosA + dy * sinA;
+  const right = dx * (-sinA) + dy * cosA;
+  const camZ = depth + 400; 
+  if (camZ < 10) return { s: -1 }; 
+  const scale = 700 / camZ;
+  return { 
+    px: W/2 + right * scale, 
+    py: H/2 - (z_height - 100) * scale, 
+    s: scale, 
+    alpha: parseFloat(Math.max(0, Math.min(1, 1 - (camZ / 18000))).toFixed(2)) 
+  };
+}
+
+function resolveMartian(choice) {
+  document.getElementById('martian-dialog').style.display = 'none';
+  Ship.state = 'flying';
+}
+
+function resolveApproach(choice) {
+  document.getElementById('approach-dialog').style.display = 'none';
+  Ship.state = choice === 1 ? 'auto_approach' : 'manual_approach';
+}
+
+function resolveQuiz(isCorrect) {
+  document.getElementById('quiz-dialog').style.display = 'none';
+  const winText = document.getElementById('win-text');
+  
+  if (isCorrect === 1) {
+    Ship.Ek = Math.min(100, Ship.Ek + 30);
+    winText.innerHTML = `<strong>Odpoveď SPRÁVNA!</strong> Energia dobitá o +30%.<br><br>Vitaj na orbite Saturnu. Využil si zosúladenú geometriu na bezpečné pristátie a pochopil si uvoľnenie zovretia.`;
+  } else {
+    winText.innerHTML = `<strong>Odpoveď NESPRÁVNA.</strong><br><br>Vitaj na orbite Saturnu. Pristátie úspešné, no bez energetického bonusu z analýzy dát.`;
+  }
+  Ship.state = 'landed';
+  document.getElementById('win-dialog').style.display = 'block';
+  document.getElementById('fact-hud').style.display = 'none';
+}
+
+function updatePhysics() {
+  if (Ship.state === 'paused' || Ship.state === 'landed' || Ship.state === 'quiz') return;
+
+  const dxS = Saturn.x - Ship.x, dyS = Saturn.y - Ship.y;
+  const distS = Math.sqrt(dxS*dxS + dyS*dyS);
+  document.getElementById('ui-dist').innerText = Math.floor(distS);
+
+  if (distS < RING_OUTER + 2500 && !Ship.hasTriggeredMartian) {
+    Ship.state = 'paused';
+    Ship.hasTriggeredMartian = true;
+    document.getElementById('martian-dialog').style.display = 'block';
+    keys['ArrowUp'] = false; keys['ArrowLeft'] = false; keys['ArrowRight'] = false;
+    return;
+  }
+
+  if (distS < 10000 && !Ship.hasTriggeredApproach) {
+    Ship.state = 'paused';
+    Ship.hasTriggeredApproach = true;
+    document.getElementById('approach-dialog').style.display = 'block';
+    keys['ArrowUp'] = false;
+    return;
+  }
+
+  if (distS < Saturn.radius + 800 && Ship.state === 'auto_approach') {
+    Ship.state = 'quiz';
+    document.getElementById('quiz-dialog').style.display = 'block';
+    return;
+  } else if (distS < Saturn.radius + 800 && Ship.state === 'manual_approach') {
+    Ship.state = 'landed';
+    document.getElementById('win-dialog').style.display = 'block';
+    return;
+  }
+
+  const inRings = (distS < RING_OUTER && distS > RING_INNER);
+  let isTryingToControl = (keys['ArrowUp'] || keys['ArrowLeft'] || keys['ArrowRight']);
+  let targetBank = 0;
+  Ship.thrust = 0;
+
+  if (Ship.state === 'auto_approach') {
+    const targetA = Math.atan2(dyS, dxS);
+    
+    let diff = targetA - Ship.angle;
+    while(diff < -Math.PI) diff += 2*Math.PI;
+    while(diff > Math.PI) diff -= 2*Math.PI;
+    Ship.angle += diff * 0.15;
+    
+    Ship.vx += (Math.cos(targetA) * 4.0 - Ship.vx) * 0.08 * gameSpeed;
+    Ship.vy += (Math.sin(targetA) * 4.0 - Ship.vy) * 0.08 * gameSpeed;
+    Ship.thrust = 0.3; 
+    
+    factTimer += gameSpeed;
+    let factIndex = Math.floor(factTimer / 300); 
+    if (factIndex >= saturnFacts.length) factIndex = saturnFacts.length - 1; 
+    
+    const factHud = document.getElementById('fact-hud');
+    factHud.innerText = saturnFacts[factIndex];
+    factHud.style.display = 'block';
+
+  } else if (Ship.state === 'manual_approach') {
+    if (keys['ArrowLeft']) { Ship.angle -= 0.05; targetBank = -0.4; }
+    if (keys['ArrowRight']) { Ship.angle += 0.05; targetBank = 0.4; }
+    if (keys['ArrowUp']) Ship.thrust = 0.8;
+
+    Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+    Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+    Ship.vx *= 0.94; Ship.vy *= 0.94; 
+
+  } else {
+    // Fáza v prstencoch alebo pred nimi
+    if (inRings) {
+      if (isTryingToControl) {
+        Ship.Dt += 0.15;
+        Ship.Ek -= Ship.Dt * 0.5;
+        Ship.vx += (Math.random() - 0.5) * 2;
+        Ship.vy += (Math.random() - 0.5) * 2;
+        document.getElementById('warn-hud').style.display = 'block';
+
+        if (Ship.Ek <= 0) {
+          Ship.state = 'paused';
+          document.getElementById('warn-hud').innerText = "☠ ZNIČENIE KŔČOM. REŠTARTUJEM...";
+          setTimeout(() => location.reload(), 2000);
+        }
+      } else {
+        Ship.Dt = Math.max(0, Ship.Dt - 0.05);
+        document.getElementById('warn-hud').style.display = 'none';
+
+        const targetA = Math.atan2(dyS, dxS);
+        Ship.vx += (Math.cos(targetA) * 15 - Ship.vx) * 0.03 * gameSpeed;
+        Ship.vy += (Math.sin(targetA) * 15 - Ship.vy) * 0.03 * gameSpeed;
+
+        const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+        let diff = velocityAngle - Ship.angle;
+        while(diff < -Math.PI) diff += 2*Math.PI;
+        while(diff > Math.PI) diff -= 2*Math.PI;
+        Ship.angle += diff * 0.05;
+        Ship.bankAngle *= 0.9;
+      }
+    } else {
+      document.getElementById('warn-hud').style.display = 'none';
+      if (keys['ArrowLeft']) { Ship.angle -= 0.05; targetBank = -0.4; }
+      if (keys['ArrowRight']) { Ship.angle += 0.05; targetBank = 0.4; }
+      if (keys['ArrowUp']) Ship.thrust = 0.5;
+    }
+
+    if (isTryingToControl && !(!isTryingToControl && inRings)) {
+      Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+      Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+    }
+    
+    Ship.vx *= 0.995; Ship.vy *= 0.995; 
+  }
+
+  Ship.bankAngle += (targetBank - Ship.bankAngle) * 0.1; 
+  Ship.x += Ship.vx * gameSpeed; 
+  Ship.y += Ship.vy * gameSpeed;
+
+  ringParticles.forEach(p => { p.angle += p.speed * gameSpeed; });
+
+  document.getElementById('ui-ek').innerText = Math.max(0, Ship.Ek).toFixed(1);
+  document.getElementById('ui-dt').innerText = Ship.Dt.toFixed(2);
+  document.getElementById('ui-ek').style.color = Ship.Ek > 50 ? '#3ef0a0' : '#f05050';
+}
+
+function draw() {
+  if (!W || !H) resize();
+  
+  const isFighting = (Ship.Dt > 1.0);
+  ctx.fillStyle = isFighting ? 'rgba(30, 5, 5, 0.6)' : 'rgba(2, 3, 5, 0.6)'; 
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.lineWidth = 1.0;
+  backgroundStars.forEach(p => {
+    let dx = p.x - Ship.x, dy = p.y - Ship.y;
+    if (dx > 10000) p.x -= 20000; else if (dx < -10000) p.x += 20000;
+    if (dy > 10000) p.y -= 20000; else if (dy < -10000) p.y += 20000;
+
+    const pt0 = project3D(p.x, p.y, p.z_height);
+    const pt1 = project3D(p.x - Ship.vx*2, p.y - Ship.vy*2, p.z_height); 
+
+    if(pt0.s > 0 && pt1.s > 0) {
+      ctx.strokeStyle = `hsla(210, 30%, 40%, ${pt0.alpha * 0.3})`;
+      ctx.beginPath(); ctx.moveTo(pt0.px, pt0.py); ctx.lineTo(pt1.px, pt1.py); ctx.stroke();
+    }
+  });
+
+  const sPt = project3D(Saturn.x, Saturn.y, 0); 
+  
+  ringParticles.forEach(p => {
+    const rx = Saturn.x + Math.cos(p.angle) * p.dist;
+    const ry = Saturn.y + Math.sin(p.angle) * p.dist;
+    const pt = project3D(rx, ry, 0);
+    
+    if(pt.s > 0) {
+      ctx.beginPath(); 
+      ctx.arc(pt.px, pt.py, p.size * pt.s, 0, Math.PI*2);
+      if (isFighting && Math.random() > 0.8) {
+        ctx.fillStyle = `rgba(255, 50, 50, ${pt.alpha})`;
+      } else {
+        const ringHue = 30 + (p.dist / RING_OUTER) * 40; 
+        ctx.fillStyle = `hsla(${ringHue}, 30%, 60%, ${pt.alpha})`;
+      }
+      ctx.fill();
+    }
+  });
+
+  if (sPt.s > 0) {
+    const sRadius = Saturn.radius * sPt.s;
+    ctx.beginPath(); ctx.arc(sPt.px, sPt.py, sRadius, 0, Math.PI*2);
+    const sGrd = ctx.createRadialGradient(sPt.px, sPt.py, 0, sPt.px, sPt.py, sRadius);
+    sGrd.addColorStop(0, `rgba(210, 200, 150, ${sPt.alpha})`);
+    sGrd.addColorStop(0.8, `rgba(180, 170, 120, ${sPt.alpha})`);
+    sGrd.addColorStop(1, `rgba(100, 90, 60, ${sPt.alpha})`);
+    ctx.fillStyle = sGrd; ctx.fill();
+  }
+
+  ctx.save();
+  ctx.translate(W/2, H/2 + 100); 
+
+  const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+  const relVelocityAngle = velocityAngle - Ship.angle; 
+  const velMag = Math.sqrt(Ship.vx*Ship.vx + Ship.vy*Ship.vy);
+  
+  ctx.save();
+  ctx.rotate(relVelocityAngle);
+  const driftDisplayDist = Math.min(velMag * 8, 80); 
+  ctx.beginPath();
+  ctx.arc(0, -driftDisplayDist, 6, 0, Math.PI*2);
+  ctx.moveTo(-10, -driftDisplayDist); ctx.lineTo(10, -driftDisplayDist);
+  ctx.moveTo(0, -driftDisplayDist-4); ctx.lineTo(0, -driftDisplayDist-10);
+  ctx.strokeStyle = 'rgba(240, 208, 64, 0.9)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+  
+  const targetAngle = Math.atan2(Saturn.y - Ship.y, Saturn.x - Ship.x);
+  const relTargetAngle = targetAngle - Ship.angle; 
+  ctx.save();
+  ctx.rotate(relTargetAngle);
+  ctx.beginPath(); ctx.moveTo(0, -65); ctx.lineTo(6, -50); ctx.lineTo(-6, -50); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
+  ctx.restore();
+
+  if (isFighting) {
+    ctx.translate((Math.random()-0.5)*10, (Math.random()-0.5)*10);
+  }
+
+  ctx.rotate(Ship.bankAngle);
+  const scale = 20; 
+  
+  ctx.beginPath();
+  ctx.moveTo(0, -scale); ctx.lineTo(scale*0.7, scale); ctx.lineTo(-scale*0.7, scale); ctx.closePath();
+  ctx.strokeStyle = isFighting ? '#f05050' : '#40aaff'; 
+  ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = 'rgba(10,15,25,0.9)'; ctx.fill();
+
+  if (Ship.thrust > 0) {
+    ctx.beginPath();
+    ctx.moveTo(0, scale*1.2); ctx.lineTo(scale*0.4, scale*2.5 + Math.random()*10); ctx.lineTo(-scale*0.4, scale*2.5 + Math.random()*10); ctx.closePath();
+    ctx.fillStyle = isFighting ? '#f05050' : '#40aaff'; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function gameLoop() {
+  try {
+    updatePhysics();
+    draw();
+    requestAnimationFrame(gameLoop);
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+gameLoop();
+</script>
+</body>
+</html>

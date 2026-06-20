@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<title>OSVA: Level 3 - Temná Zóna a Jupiter v3.4</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #010204; color: #e0e8f0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; }
+  canvas { display: block; width: 100%; height: 100%; }
+  
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; padding: 20px; }
+  .metric { font-size: 14px; margin-bottom: 8px; letter-spacing: 1px; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
+  .val { font-weight: bold; }
+  
+  .dialog-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(8, 12, 20, 0.95); border: 1px solid #a050f0; padding: 30px;
+    border-radius: 6px; text-align: center; display: none; pointer-events: auto;
+    box-shadow: 0 0 50px rgba(160, 80, 240, 0.3); max-width: 650px; z-index: 100;
+  }
+  .dialog-title { font-size: 18px; margin-bottom: 15px; letter-spacing: 2px; color: #a050f0; text-transform: uppercase; }
+  .dialog-text { font-size: 14px; line-height: 1.6; color: #b0a0d0; margin-bottom: 25px; }
+  button {
+    background: #111a24; border: 1px solid #2a4a6a; color: #80c0f0;
+    padding: 14px 15px; font-size: 13px; cursor: pointer; border-radius: 4px;
+    font-family: monospace; margin: 6px 0; width: 100%; transition: all 0.2s; text-align: left;
+  }
+  button:hover { background: #1a2a3a; border-color: #40aaff; box-shadow: 0 0 15px rgba(64,170,255,0.3); }
+  .btn-osva { border-color: #3ef0a0; color: #3ef0a0; }
+  .btn-osva:hover { background: rgba(62,240,160,0.1); border-color: #50ffb0; }
+
+  #legend {
+    position: absolute; bottom: 20px; left: 20px; font-size: 11px; color: #6a8a9a; 
+    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 4px; border: 1px solid #1a2a3a;
+  }
+
+  #btn-difficulty {
+    position: absolute; top: 20px; right: 20px; pointer-events: auto;
+    background: #1a2a3a; border: 1px solid #f0d040; color: #f0d040;
+    padding: 8px 15px; font-size: 12px; border-radius: 4px; cursor: pointer;
+  }
+
+  #fact-hud {
+    position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; color: #f0d040; letter-spacing: 2px; text-align: center;
+    background: rgba(10, 15, 25, 0.9); padding: 15px 30px; border-radius: 4px; border: 1px solid #f0d040;
+    text-shadow: 0 0 10px rgba(240, 208, 64, 0.5); display: none; width: 80%; max-width: 800px;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-layer">
+  <div style="color:#4a7fa5; font-size: 10px; margin-bottom: 15px; text-transform: uppercase;">L3: PÁS ASTEROIDOV -> JUPITER</div>
+  <div class="metric" style="color: #3ef0a0;">Energia Koherencie: <span id="ui-ek" class="val">100.0</span>%</div>
+  <div class="metric" style="color: #f05050;">Vnútorný Odpor (Dt): <span id="ui-dt" class="val">0.00</span></div>
+  <div class="metric" style="color: #40aaff;">Vzdialenosť na Jupiter: <span id="ui-dist" class="val">---</span> km</div>
+  <div class="metric" style="color: #a050f0; margin-top: 15px; font-size: 12px; display:none;" id="warn-hud">⚠ NEZNÁME PREKÁŽKY V DRÁHE</div>
+  
+  <button id="btn-difficulty" onclick="toggleDifficulty()">⏱️ Režim: Začiatočník (Pomalý)</button>
+</div>
+
+<div id="fact-hud">Analýza dát Jupitera...</div>
+
+<div id="legend">
+  <span style="color:#a050f0;">◎ Kauzálny Pulz:</span> SHIFT (Skenovanie okolia)<br>
+  <span style="color:#f0d040;">⨀ Vektor:</span> Skutočný pohyb<br>
+  <span style="color:#ffffff;">◁ Radar:</span> Jupiter<br>
+  <strong>Ovl:</strong> Šípky (Rotácia), HORE (Ťah)
+</div>
+
+<div id="martian-dialog" class="dialog-box">
+  <div class="dialog-title">ZÁSAH SYSTÉMU: DETEKCIA NEZNÁMA</div>
+  <div class="dialog-text">
+    Vstupuješ do hustého poľa prekážok. Viditeľnosť klesá. Pocit stiahnutia a úzkosti (Strach), ktorý registruješ, nie je tvoja slabosť.<br><br>
+    Strach je kauzálny nástroj. Zostruje zmysly. Použi ho na skenovanie priestoru pred tebou a odhalenie skrytých hrozieb.
+  </div>
+  <button onclick="resolveMartian(0)" style="border-color:#f05050; color:#f05050;">1. [Hrubá sila] Letieť naslepo. Ignorovať obozretnosť a spoľahnúť sa na šťastie.</button>
+  <button class="btn-osva" onclick="resolveMartian(1)">2. [Geometria Vesmíru] Využiť strach na zvýšenie pozornosti. Aktivovať Kauzálny Pulz (SHIFT) na zmapovanie dráhy.</button>
+</div>
+
+<div id="approach-dialog" class="dialog-box" style="border-color:#40aaff;">
+  <div class="dialog-title" style="color:#40aaff;">ZÁSAH SYSTÉMU: PRIBLÍŽENIE K JUPITERU</div>
+  <div class="dialog-text">
+    Pás asteroidov je prekonaný. Pred tebou je gravitačná studňa Jupitera. Letíš s obrovskou kinetickou energiou.<br><br>
+    <strong>Akým spôsobom chceš vykonať orbitálnu inzerkciu (pristátie)?</strong>
+  </div>
+  <button onclick="resolveApproach(0)" style="border-color:#f05050; color:#f05050;">1. [Hrubá sila] Manuálne brzdenie. Budem bojovať so zotrvačnosťou sám.</button>
+  <button class="btn-osva" onclick="resolveApproach(1)">2. [Geometria Vesmíru] Autonavigácia. Zladiť vektor priamo na planétu a spustiť skenovanie faktov.</button>
+</div>
+
+<div id="quiz-dialog" class="dialog-box" style="border-color:#f0d040;">
+  <div class="dialog-title" style="color:#f0d040;">ZÁVEREČNÁ ANALÝZA DÁT</div>
+  <div class="dialog-text">
+    Skenovanie planéty dokončené.<br><br>
+    <strong>Otázka: Aká dlhá je rotácia (jeden deň) na Jupiteri?</strong>
+  </div>
+  <button onclick="resolveQuiz(0)">1. 24 hodín a 30 minút</button>
+  <button onclick="resolveQuiz(1)">2. Iba 9.9 hodín (10 hodín)</button>
+  <button onclick="resolveQuiz(0)">3. 4332 dní</button>
+</div>
+
+<div id="win-dialog" class="dialog-box" style="border-color:#3ef0a0;">
+  <div class="dialog-title" id="win-title" style="color: #3ef0a0;">ZACHYTENIE ÚSPEŠNÉ</div>
+  <div class="dialog-text" id="win-text">
+    Vitaj na orbite Jupitera. Nepodľahol si panike v neznámom prostredí. Strach si transformoval na mapovací nástroj.
+  </div>
+  <button class="btn-osva" style="text-align:center;" onclick="location.reload()">Dokončiť Simuláciu</button>
+</div>
+
+<script>
+window.onerror = function(msg, url, line) {
+  const errScreen = document.getElementById('error-screen');
+  if(errScreen) {
+    errScreen.style.display = 'block';
+    errScreen.innerHTML = `<h2>Kritická chyba:</h2><p>${msg}</p><p>Riadok: ${line}</p>`;
+  }
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+let gameSpeed = 0.6; 
+let isBeginner = true;
+
+function toggleDifficulty() {
+  isBeginner = !isBeginner;
+  gameSpeed = isBeginner ? 0.6 : 1.0;
+  document.getElementById('btn-difficulty').innerText = isBeginner ? "⏱️ Režim: Začiatočník (Pomalý)" : "⏱️ Režim: Profík (Rýchly)";
+}
+
+const jupiterFacts = [
+  "SKENOVANIE DÁT: Rok = 4332.59 pozemských dní | Polomer = 69 911 km | Vzdialenosť = 5.203 AU",
+  "FAKT: Najväčšia planéta — zmestilo by sa do nej 1 300 Zemí.",
+  "FAKT: Veľká červená škvrna — gigantická búrka trvajúca viac ako 350 rokov.",
+  "FAKT: Systém má momentálne 95 známych mesiacov.",
+  "FAKT: Extrémne rýchla rotácia. Deň trvá len 9.9 hodín.",
+  "FUNKCIA: Ako gravitačný štít chráni vnútornú sústavu pred asteroidmi."
+];
+let factTimer = 0;
+
+const Jupiter = { x: 0, y: -45000, mass: 12000, radius: 550 }; 
+
+const Ship = {
+  x: 0, y: 0,          
+  vx: 0, vy: -15.0,            
+  angle: -Math.PI/2,               
+  thrust: 0, Ek: 100, Dt: 0, I: 1.0, M: 0,
+  state: 'flying', 
+  bankAngle: 0,
+  hasTriggeredMartian: false,
+  hasTriggeredApproach: false
+};
+
+const asteroids = [];
+const pulses = [];
+let pulseCooldown = 0;
+
+for(let i=0; i<180; i++) {
+  asteroids.push({
+    x: (Math.random()-0.5)*14000,
+    y: -3000 - Math.random()*36000, 
+    vx: (Math.random()-0.5)*3,
+    vy: (Math.random()-0.5)*3,
+    radius: 30 + Math.random()*70,
+    revealedTimer: 0
+  });
+}
+
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if(['Space', 'ShiftLeft', 'ShiftRight', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+let particles = [];
+for(let i=0; i<500; i++) {
+  particles.push({
+    x: (Math.random()-0.5)*15000,
+    y: (Math.random()-0.5)*15000,
+    z_height: (Math.random()-0.5)*6000,
+    speed: 0.2 + Math.random()*1
+  });
+}
+
+// CHIRURGICKÝ REZ: Zmazaný offset z Math.cos a Math.sin
+function project3D(x, y, z_height) {
+  const dx = x - Ship.x, dy = y - Ship.y;
+  const cosA = Math.cos(Ship.angle), sinA = Math.sin(Ship.angle);
+  const depth = dx * cosA + dy * sinA;
+  const right = dx * (-sinA) + dy * cosA;
+  const camZ = depth + 400; 
+  if (camZ < 10) return { s: -1 }; 
+  const scale = 700 / camZ;
+  return { 
+    px: W/2 + right * scale, 
+    py: H/2 - (z_height - 100) * scale, 
+    s: scale, 
+    alpha: parseFloat(Math.max(0, Math.min(1, 1 - (camZ / 14000))).toFixed(2)) 
+  };
+}
+
+function resolveMartian(choice) {
+  document.getElementById('martian-dialog').style.display = 'none';
+  Ship.state = 'flying';
+  if (choice === 0) {
+    Ship.Dt += 1.0; 
+    Ship.Ek -= 10;
+  }
+}
+
+function resolveApproach(choice) {
+  document.getElementById('approach-dialog').style.display = 'none';
+  Ship.state = choice === 1 ? 'auto_approach' : 'manual_approach';
+}
+
+function resolveQuiz(isCorrect) {
+  document.getElementById('quiz-dialog').style.display = 'none';
+  const winText = document.getElementById('win-text');
+  
+  if (isCorrect === 1) {
+    Ship.Ek = Math.min(100, Ship.Ek + 30);
+    winText.innerHTML = `<strong>Odpoveď SPRÁVNA!</strong> Energia dobitá o +30%.<br><br>Vitaj na orbite Jupitera. Nepodľahol si panike v neznámom prostredí a využil si zosúladenú geometriu na bezpečné pristátie.`;
+  } else {
+    winText.innerHTML = `<strong>Odpoveď NESPRÁVNA.</strong><br><br>Vitaj na orbite Jupitera. Pristátie úspešné, no bez energetického bonusu z analýzy dát.`;
+  }
+  Ship.state = 'landed';
+  document.getElementById('win-dialog').style.display = 'block';
+  document.getElementById('fact-hud').style.display = 'none';
+}
+
+function updatePhysics() {
+  if (Ship.state === 'paused' || Ship.state === 'landed' || Ship.state === 'quiz') return;
+
+  const dxJ = Jupiter.x - Ship.x, dyJ = Jupiter.y - Ship.y;
+  const distJ = Math.sqrt(dxJ*dxJ + dyJ*dyJ);
+  document.getElementById('ui-dist').innerText = Math.floor(distJ);
+
+  if (Ship.y < -2000 && !Ship.hasTriggeredMartian) {
+    Ship.state = 'paused';
+    Ship.hasTriggeredMartian = true;
+    document.getElementById('martian-dialog').style.display = 'block';
+    keys['ArrowUp'] = false;
+    return;
+  }
+
+  if (distJ < 6000 && !Ship.hasTriggeredApproach) {
+    Ship.state = 'paused';
+    Ship.hasTriggeredApproach = true;
+    document.getElementById('approach-dialog').style.display = 'block';
+    keys['ArrowUp'] = false;
+    return;
+  }
+
+  if (distJ < Jupiter.radius + 600 && Ship.state === 'auto_approach') {
+    Ship.state = 'quiz';
+    document.getElementById('quiz-dialog').style.display = 'block';
+    return;
+  } else if (distJ < Jupiter.radius + 600 && Ship.state === 'manual_approach') {
+    Ship.state = 'landed';
+    document.getElementById('win-dialog').style.display = 'block';
+    return;
+  }
+
+  let targetBank = 0;
+  Ship.thrust = 0;
+
+  if (Ship.state === 'auto_approach') {
+    const targetA = Math.atan2(dyJ, dxJ);
+    
+    let diff = targetA - Ship.angle;
+    while(diff < -Math.PI) diff += 2*Math.PI;
+    while(diff > Math.PI) diff -= 2*Math.PI;
+    Ship.angle += diff * 0.15;
+    
+    Ship.vx += (Math.cos(targetA) * 4.0 - Ship.vx) * 0.08 * gameSpeed;
+    Ship.vy += (Math.sin(targetA) * 4.0 - Ship.vy) * 0.08 * gameSpeed;
+    
+    Ship.thrust = 0.3; 
+    
+    factTimer += gameSpeed;
+    let factIndex = Math.floor(factTimer / 300); 
+    if (factIndex >= jupiterFacts.length) factIndex = jupiterFacts.length - 1; 
+    
+    const factHud = document.getElementById('fact-hud');
+    factHud.innerText = jupiterFacts[factIndex];
+    factHud.style.display = 'block';
+    
+  } else {
+    if (keys['ArrowLeft']) { Ship.angle -= 0.05; targetBank = -0.4; }
+    if (keys['ArrowRight']) { Ship.angle += 0.05; targetBank = 0.4; }
+    if (keys['ArrowUp']) Ship.thrust = 0.45;
+
+    if (Ship.state === 'manual_approach') {
+      if (keys['ArrowUp']) Ship.thrust = 0.8;
+      Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+      Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+      Ship.vx *= 0.94; Ship.vy *= 0.94; 
+    } else {
+      Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+      Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+      Ship.vx *= 0.995; Ship.vy *= 0.995; 
+    }
+  }
+
+  if ((keys['ShiftLeft'] || keys['ShiftRight']) && pulseCooldown === 0 && Ship.state === 'flying') {
+    pulses.push({ x: Ship.x, y: Ship.y, radius: 0, maxRadius: 3500, alpha: 1.0 });
+    pulseCooldown = 60; 
+  }
+  if (pulseCooldown > 0) pulseCooldown--;
+
+  Ship.bankAngle += (targetBank - Ship.bankAngle) * 0.1; 
+  Ship.x += Ship.vx * gameSpeed; 
+  Ship.y += Ship.vy * gameSpeed;
+
+  for (let i = pulses.length - 1; i >= 0; i--) {
+    let p = pulses[i];
+    p.radius += 50 * gameSpeed;
+    p.alpha -= 0.02 * gameSpeed;
+    if (p.alpha <= 0 || p.radius >= p.maxRadius) pulses.splice(i, 1);
+  }
+
+  asteroids.forEach(a => {
+    a.x += a.vx * gameSpeed;
+    a.y += a.vy * gameSpeed;
+    if (a.revealedTimer > 0) a.revealedTimer -= 1 * gameSpeed;
+
+    pulses.forEach(p => {
+      const distToPulse = Math.sqrt((a.x - p.x)**2 + (a.y - p.y)**2);
+      if (Math.abs(distToPulse - p.radius) < 100) {
+        a.revealedTimer = 180; 
+      }
+    });
+
+    const dxA = a.x - Ship.x, dyA = a.y - Ship.y;
+    const distA = Math.sqrt(dxA*dxA + dyA*dyA);
+    if (distA < a.radius + 20) {
+      Ship.Ek -= 15;
+      Ship.Dt += 0.2;
+      Ship.vx = -Ship.vx * 0.5 + a.vx;
+      Ship.vy = -Ship.vy * 0.5 + a.vy;
+      a.revealedTimer = 60; 
+      
+      if (Ship.Ek <= 0) {
+        Ship.state = 'paused';
+        document.getElementById('warn-hud').innerText = "☠ SYSTÉM ZNIČENÝ NÁRAZMI.";
+        document.getElementById('warn-hud').style.display = 'block';
+        setTimeout(() => location.reload(), 2000);
+      }
+    }
+  });
+
+  document.getElementById('ui-ek').innerText = Math.max(0, Ship.Ek).toFixed(1);
+  document.getElementById('ui-dt').innerText = Ship.Dt.toFixed(2);
+  document.getElementById('ui-ek').style.color = Ship.Ek > 50 ? '#3ef0a0' : '#f05050';
+}
+
+function draw() {
+  if (!W || !H) resize();
+  ctx.fillStyle = 'rgba(1, 2, 4, 0.6)'; 
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.lineWidth = 1.0;
+  particles.forEach(p => {
+    let dx = p.x - Ship.x, dy = p.y - Ship.y;
+    if (dx > 7500) p.x -= 15000; else if (dx < -7500) p.x += 15000;
+    if (dy > 7500) p.y -= 15000; else if (dy < -7500) p.y += 15000;
+
+    const pt0 = project3D(p.x, p.y, p.z_height);
+    const pt1 = project3D(p.x - Ship.vx*2, p.y - Ship.vy*2, p.z_height); 
+
+    if(pt0.s > 0 && pt1.s > 0) {
+      ctx.strokeStyle = `hsla(210, 50%, 30%, ${pt0.alpha * 0.5})`;
+      ctx.beginPath(); ctx.moveTo(pt0.px, pt0.py); ctx.lineTo(pt1.px, pt1.py); ctx.stroke();
+    }
+  });
+
+  pulses.forEach(p => {
+    const pt = project3D(p.x, p.y, 0);
+    if(pt.s > 0) {
+      ctx.beginPath();
+      ctx.arc(pt.px, pt.py, p.radius * pt.s, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(160, 80, 240, ${p.alpha})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  });
+
+  asteroids.forEach(a => {
+    const pt = project3D(a.x, a.y, 0);
+    if(pt.s > 0) {
+      const radius = a.radius * pt.s;
+      let alpha = a.revealedTimer > 0 ? (a.revealedTimer / 180) : 0.05;
+      
+      ctx.beginPath(); ctx.arc(pt.px, pt.py, radius, 0, Math.PI*2);
+      
+      if (a.revealedTimer > 0) {
+        ctx.fillStyle = `rgba(160, 80, 240, ${alpha * pt.alpha})`;
+        ctx.strokeStyle = `rgba(220, 200, 255, ${alpha * pt.alpha})`;
+        ctx.lineWidth = 2;
+        ctx.fill(); ctx.stroke();
+      } else {
+        ctx.fillStyle = `rgba(10, 10, 15, ${pt.alpha})`;
+        ctx.strokeStyle = `rgba(30, 30, 40, ${pt.alpha})`;
+        ctx.lineWidth = 1;
+        ctx.fill(); ctx.stroke();
+      }
+    }
+  });
+
+  const jPt = project3D(Jupiter.x, Jupiter.y, 0); 
+  if (jPt.s > 0) {
+    const jRadius = Jupiter.radius * jPt.s;
+    ctx.beginPath(); ctx.arc(jPt.px, jPt.py, jRadius, 0, Math.PI*2);
+    const jGrd = ctx.createRadialGradient(jPt.px, jPt.py, 0, jPt.px, jPt.py, jRadius);
+    jGrd.addColorStop(0, `rgba(200, 160, 120, ${jPt.alpha})`);
+    jGrd.addColorStop(0.5, `rgba(150, 100, 70, ${jPt.alpha})`);
+    jGrd.addColorStop(1, `rgba(50, 30, 20, ${jPt.alpha})`);
+    ctx.fillStyle = jGrd; ctx.fill();
+  }
+
+  ctx.save();
+  ctx.translate(W/2, H/2 + 100); 
+
+  const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+  // CHIRURGICKÝ REZ: Zmazaný offset pre Vektor radar
+  const relVelocityAngle = velocityAngle - Ship.angle; 
+  const velMag = Math.sqrt(Ship.vx*Ship.vx + Ship.vy*Ship.vy);
+  
+  ctx.save();
+  ctx.rotate(relVelocityAngle);
+  const driftDisplayDist = Math.min(velMag * 8, 80); 
+  ctx.beginPath();
+  ctx.arc(0, -driftDisplayDist, 6, 0, Math.PI*2);
+  ctx.moveTo(-10, -driftDisplayDist); ctx.lineTo(10, -driftDisplayDist);
+  ctx.moveTo(0, -driftDisplayDist-4); ctx.lineTo(0, -driftDisplayDist-10);
+  ctx.strokeStyle = 'rgba(240, 208, 64, 0.9)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+  
+  const targetAngle = Math.atan2(Jupiter.y - Ship.y, Jupiter.x - Ship.x);
+  // CHIRURGICKÝ REZ: Zmazaný offset pre Jupiter radar
+  const relTargetAngle = targetAngle - Ship.angle; 
+  ctx.save();
+  ctx.rotate(relTargetAngle);
+  ctx.beginPath(); ctx.moveTo(0, -65); ctx.lineTo(6, -50); ctx.lineTo(-6, -50); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
+  ctx.restore();
+
+  ctx.rotate(Ship.bankAngle);
+  const sScale = 20; 
+  
+  ctx.beginPath();
+  ctx.moveTo(0, -sScale); ctx.lineTo(sScale*0.7, sScale); ctx.lineTo(-sScale*0.7, sScale); ctx.closePath();
+  ctx.strokeStyle = (Ship.Dt > 0.5) ? '#f05050' : '#a050f0'; 
+  ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = 'rgba(10,15,25,0.9)'; ctx.fill();
+
+  if (Ship.thrust > 0) {
+    ctx.beginPath();
+    ctx.moveTo(0, sScale*1.2); ctx.lineTo(sScale*0.4, sScale*2.5 + Math.random()*10); ctx.lineTo(-sScale*0.4, sScale*2.5 + Math.random()*10); ctx.closePath();
+    ctx.fillStyle = (Ship.Dt > 0.5) ? '#f05050' : '#a050f0'; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function gameLoop() {
+  try {
+    updatePhysics();
+    draw();
+    requestAnimationFrame(gameLoop);
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+gameLoop();
+</script>
+</body>
+</html>

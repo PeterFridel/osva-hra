@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>OSVA: Level 1 - Vektor a Zotrvačnosť v2.0</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #03050a; color: #e0e8f0; font-family: 'Courier New', monospace;
+    overflow: hidden; height: 100%; width: 100%; touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+    padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 16px calc(16px + env(safe-area-inset-left)); }
+  .metric { font-size: 14px; margin-bottom: 8px; letter-spacing: 1px; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
+  .val { font-weight: bold; }
+
+  #tutorial-msg {
+    position: absolute; top: calc(40px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    font-size: 15px; color: #f0d040; letter-spacing: 1px; text-align: center; width: 90%; max-width: 520px;
+    background: rgba(10, 15, 25, 0.85); padding: 12px 24px; border-radius: 4px; border: 1px solid #f0d040;
+    transition: opacity 0.5s; text-shadow: 0 0 8px rgba(240, 208, 64, 0.4);
+  }
+
+  .dialog-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(8, 12, 20, 0.96); border: 1px solid #3a9fef; padding: 26px;
+    border-radius: 6px; text-align: center; display: none; pointer-events: auto;
+    box-shadow: 0 0 40px rgba(58, 159, 239, 0.3); max-width: 600px; width: 92%; z-index: 100;
+  }
+  .dialog-title { color: #3ef0a0; font-size: 18px; margin-bottom: 15px; letter-spacing: 2px; }
+  .dialog-text { font-size: 14px; line-height: 1.6; color: #a0b8d0; margin-bottom: 25px; }
+  .dialog-text .sm { font-size: 12px; color: #80c0f0; }
+  button {
+    background: #111a24; border: 1px solid #2a4a6a; color: #80c0f0;
+    padding: 14px 15px; font-size: 13px; cursor: pointer; border-radius: 4px;
+    font-family: monospace; margin: 6px 0; width: 100%; transition: all 0.2s; text-align: left;
+  }
+  button:hover { background: #1a2a3a; border-color: #40aaff; }
+  .btn-osva { border-color: #3ef0a0; color: #3ef0a0; }
+  .btn-osva:hover { background: rgba(62,240,160,0.1); border-color: #50ffb0; }
+
+  #legend {
+    position: absolute; bottom: calc(14px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    font-size: 11px; color: #6a8a9a; text-align: center; width: 92%;
+    background: rgba(0,0,0,0.4); padding: 8px; border-radius: 4px; border: 1px solid #1a2a3a;
+  }
+
+  #btn-gear {
+    position: absolute; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right));
+    pointer-events: auto; background: #1a2a3a; border: 1px solid #4a7fa5; color: #cfe4ff;
+    padding: 8px 12px; font-size: 16px; border-radius: 6px; cursor: pointer; width: auto; margin: 0;
+  }
+
+  /* MENU / NASTAVENIA */
+  #menu {
+    position: absolute; inset: 0; z-index: 200; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; pointer-events: auto;
+    padding: calc(20px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));
+    background: radial-gradient(circle at 50% 40%, rgba(8,16,30,.7), rgba(3,5,10,.97));
+  }
+  #menu h1 { font-size: clamp(40px, 11vw, 72px); color: #9fe8ff; text-shadow: 0 0 30px #3a9fef; letter-spacing: 4px; }
+  #menu .sub { color: #4a7fa5; font-size: 12px; letter-spacing: 3px; margin-top: 4px; text-transform: uppercase; }
+  .setrow { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+  .setrow .lab { color: #80a0c0; font-size: 13px; min-width: 92px; text-align: right; }
+  .opt { width: auto; margin: 0; padding: 10px 16px; min-width: 56px; text-align: center; }
+  .opt.sel { background: rgba(62,240,160,0.12); border-color: #3ef0a0; color: #3ef0a0; }
+  #m_start { width: auto; margin-top: 30px; padding: 16px 50px; font-size: 16px; letter-spacing: 3px;
+    border-color: #3ef0a0; color: #3ef0a0; text-align: center; }
+  #m_start:hover { background: rgba(62,240,160,0.12); }
+
+  #error-screen { position: absolute; inset: 0; background: #400000; color: #fff; padding: 30px;
+    display: none; z-index: 9999; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div id="error-screen"></div>
+<canvas id="gameCanvas"></canvas>
+
+<div id="tutorial-msg"></div>
+
+<div id="ui-layer">
+  <div id="lbl-head" style="color:#4a7fa5; font-size: 10px; margin-bottom: 15px; text-transform: uppercase;"></div>
+  <div class="metric" style="color: #3ef0a0;"><span id="lbl-ek"></span> <span id="ui-ek" class="val">100.0</span>%</div>
+  <div class="metric" style="color: #f05050;"><span id="lbl-dt"></span> <span id="ui-dt" class="val">0.00</span></div>
+  <div class="metric" style="color: #80c0f0; margin-top: 15px; font-size: 12px;"><span id="lbl-dist"></span> <span id="ui-dist" class="val">---</span> <span id="lbl-km"></span></div>
+</div>
+
+<button id="btn-gear" onclick="openMenu()">⚙</button>
+
+<div id="legend"></div>
+
+<div id="martian-dialog" class="dialog-box">
+  <div class="dialog-title" id="m-title"></div>
+  <div class="dialog-text" id="m-text"></div>
+  <button id="m-btn0" onclick="resolveMartian(0)"></button>
+  <button class="btn-osva" id="m-btn1" onclick="resolveMartian(1)"></button>
+</div>
+
+<div id="win-dialog" class="dialog-box">
+  <div class="dialog-title" style="color: #40aaff;" id="w-title"></div>
+  <div class="dialog-text" id="w-text"></div>
+  <button class="btn-osva" style="text-align:center;" id="w-btn" onclick="location.reload()"></button>
+</div>
+
+<!-- MENU / NASTAVENIA -->
+<div id="menu">
+  <h1>OSVA</h1>
+  <div class="sub" id="menu-sub"></div>
+  <div class="setrow"><span class="lab" id="lab-lang"></span>
+    <button class="opt" data-lang="sk">SK</button><button class="opt" data-lang="en">EN</button></div>
+  <div class="setrow"><span class="lab" id="lab-steer"></span>
+    <button class="opt" id="opt-steer"></button></div>
+  <div class="setrow"><span class="lab" id="lab-diff"></span>
+    <button class="opt" id="opt-diff"></button></div>
+  <button id="m_start" onclick="closeMenu()"></button>
+</div>
+
+<script>
+window.onerror = function(msg, url, line) {
+  const e = document.getElementById('error-screen');
+  if (e) { e.style.display = 'block'; e.innerHTML = '<h3>Chyba:</h3><p>'+msg+'</p><p>Riadok: '+line+'</p>'; }
+};
+
+// ═══════════ JAZYK ═══════════
+const L = {
+  sk: {
+    head: 'L1: ZEM → MESIAC', ek: 'Energia Koherencie:', dt: 'Vnútorný Odpor (Dₜ):',
+    dist: 'Vzdialenosť k Lune:', km: 'km',
+    tut1: 'KROK 1: Zoznám sa s riadením. Otáčaj loď doľava (◀) a doprava (▶).',
+    tut2: 'KROK 2: Výborne. Teraz otoč nos k cieľu, pridaj ťah (▲) a sleduj svoj reálny prúd — žltý krúžok.',
+    legend: '◁ Radar: smer k cieľu · ⨀ žltý krúžok: tvoj skutočný pohyb · ◀ ▶ rotácia · ▲ ťah',
+    mTitle: 'ZÁSAH SYSTÉMU: DETEKCIA ODPORU',
+    mText: 'Snažíš sa uniknúť gravitácii hrubou silou. Tvoja stará zotrvačnosť ťa ťahá mimo cieľ.<br><br>Tento boj s prúdom generuje vnútorný odpor a spaľuje energiu. Ak zosúladíš svoju snahu s fyzikou priestoru, geometria vesmíru ťa sama navedie k cieľu bez zbytočnej námahy.',
+    mBtn0: '1. [Hrubá sila] Ignorovať radu, maximalizovať ťah a skúsiť prepísať zotrvačnosť.',
+    mBtn1: '2. [Geometria Vesmíru] Vypnúť odpor, zosúladiť vektory a nechať sa zachytiť rezonanciou.',
+    wTitle: 'KOHERENCIA DOSIAHNUTÁ',
+    wText: 'Výborne. Pochopil si, že namieriť na cieľ nestačí. Musíš upraviť svoj skutočný vektor pohybu.<br><br>Zosúladením s dynamikou systému klesol tvoj vnútorný odpor na nulu a získal si stabilnú orbitu zadarmo.<br><br><strong style="color:#e0e8f0;">Odomknuté dáta: Mesiac (Luna)</strong><br><span class="sm">Orbitálna rezonancia: Tidal Lock — vždy ukazuje Zemi iba jednu stranu.</span>',
+    wBtn: 'Reštartovať Simuláciu',
+    sub: 'PILOT · NÁCVIK VEKTORA', start: 'ŠTART',
+    labLang: 'Jazyk', labSteer: 'Kormidlo', labDiff: 'Režim',
+    steerR: 'Vpravo', steerL: 'Vľavo', diffBeg: 'Začiatočník', diffPro: 'Profík'
+  },
+  en: {
+    head: 'L1: EARTH → MOON', ek: 'Coherence Energy:', dt: 'Inner Drag (Dₜ):',
+    dist: 'Distance to Moon:', km: 'km',
+    tut1: 'STEP 1: Get to know the controls. Rotate the ship left (◀) and right (▶).',
+    tut2: 'STEP 2: Good. Now point your nose at the target, add thrust (▲) and watch your real flow — the yellow ring.',
+    legend: '◁ Radar: heading to target · ⨀ yellow ring: your real motion · ◀ ▶ rotate · ▲ thrust',
+    mTitle: 'SYSTEM INTERVENTION: DRAG DETECTED',
+    mText: 'You are trying to escape gravity by brute force. Your old inertia is pulling you off target.<br><br>This fight with the current generates inner drag and burns energy. If you align your effort with the physics of space, the geometry of the universe will guide you to the target without wasted effort.',
+    mBtn0: '1. [Brute force] Ignore the advice, max the thrust and try to overwrite inertia.',
+    mBtn1: '2. [Geometry of the universe] Drop the drag, align the vectors and let resonance capture you.',
+    wTitle: 'COHERENCE ACHIEVED',
+    wText: 'Well done. You understood that aiming at the target is not enough. You must adjust your real motion vector.<br><br>By aligning with the system\'s dynamics your inner drag dropped to zero and you gained a stable orbit for free.<br><br><strong style="color:#e0e8f0;">Data unlocked: The Moon (Luna)</strong><br><span class="sm">Orbital resonance: Tidal Lock — always shows Earth only one side.</span>',
+    wBtn: 'Restart Simulation',
+    sub: 'PILOT · VECTOR DRILL', start: 'START',
+    labLang: 'Language', labSteer: 'Steering', labDiff: 'Mode',
+    steerR: 'Right', steerL: 'Left', diffBeg: 'Beginner', diffPro: 'Pro'
+  }
+};
+function T() { return L[settings.lang]; }
+
+// ═══════════ NASTAVENIA (perzistentné) ═══════════
+const settings = { lang: 'sk', steerSide: 'R', beginner: true };
+try {
+  const s = JSON.parse(localStorage.getItem('osva_settings') || '{}');
+  if (s.lang) settings.lang = s.lang;
+  if (s.steerSide) settings.steerSide = s.steerSide;
+  if (typeof s.beginner === 'boolean') settings.beginner = s.beginner;
+} catch (e) {}
+function saveSettings() { try { localStorage.setItem('osva_settings', JSON.stringify(settings)); } catch (e) {} }
+let gameSpeed = settings.beginner ? 0.6 : 1.0;
+
+// ═══════════ CANVAS ═══════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H, DPR;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize); resize();
+
+// ═══════════ STAV ═══════════
+const Earth = { x: 0, y: 0, mass: 15000, radius: 250 };
+const Moon  = { x: 0, y: -7500, mass: 2000, radius: 80 };
+
+const Ship = {
+  x: 0, y: -600, vx: 5.0, vy: 0, angle: 0,
+  thrust: 0, Ek: 100, Dt: 0, I: 1.0, M: 0,
+  state: 'flying', bankAngle: 0, hasTriggeredMartian: false
+};
+let tutorialStage = 0;
+let initialAngle = Ship.angle;
+let thrustTimer = 0;
+
+// ═══════════ VSTUP (klávesnica + dotyk → spoločné vlajky) ═══════════
+const input = { left: false, right: false, thrust: false };
+
+window.addEventListener('keydown', e => {
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(e.code)) e.preventDefault();
+  if (e.code === 'ArrowLeft') input.left = true;
+  if (e.code === 'ArrowRight') input.right = true;
+  if (e.code === 'ArrowUp') input.thrust = true;
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'ArrowLeft') input.left = false;
+  if (e.code === 'ArrowRight') input.right = false;
+  if (e.code === 'ArrowUp') input.thrust = false;
+});
+
+// dotykové zóny (prehoditeľná strana)
+function zones() {
+  const r = Math.max(34, Math.min(W, H) * 0.085);
+  const pad = r * 0.9 + 16;
+  const by = H - r - 22 - (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sab')) || 0);
+  const gap = r * 2.3;
+  const steerRight = settings.steerSide === 'R';
+  const steerX = steerRight ? W - pad - r : pad + r;
+  const dir = steerRight ? -1 : 1;
+  const bA = { x: steerX, y: by };
+  const bB = { x: steerX + dir * gap, y: by };
+  let leftBtn, rightBtn;
+  if (bA.x < bB.x) { leftBtn = bA; rightBtn = bB; } else { leftBtn = bB; rightBtn = bA; }
+  const thrustX = steerRight ? pad + r : W - pad - r;
+  return { leftBtn, rightBtn, thrust: { x: thrustX, y: by }, r };
+}
+function zoneAt(x, y) {
+  const z = zones(), hit = z.r * 1.3;
+  if (Math.hypot(x - z.thrust.x, y - z.thrust.y) < hit) return 'thrust';
+  if (Math.hypot(x - z.leftBtn.x, y - z.leftBtn.y) < hit) return 'left';
+  if (Math.hypot(x - z.rightBtn.x, y - z.rightBtn.y) < hit) return 'right';
+  return null;
+}
+function refreshTouch(e) {
+  if (menuOpen) return;
+  e.preventDefault();
+  input.left = input.right = input.thrust = false;
+  for (const t of e.touches) {
+    const z = zoneAt(t.clientX, t.clientY);
+    if (z === 'left') input.left = true;
+    else if (z === 'right') input.right = true;
+    else if (z === 'thrust') input.thrust = true;
+  }
+}
+['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(ev =>
+  canvas.addEventListener(ev, refreshTouch, { passive: false }));
+
+// ═══════════ ČASTICE ═══════════
+let particles = [];
+for (let i = 0; i < 700; i++) particles.push({
+  x: (Math.random() - 0.5) * 10000, y: (Math.random() - 0.5) * 10000,
+  z_height: (Math.random() - 0.5) * 5000, speed: 0.5 + Math.random() * 2
+});
+
+function project3D(x, y, z_height) {
+  const dx = x - Ship.x, dy = y - Ship.y;
+  const cosA = Math.cos(Ship.angle - Math.PI / 2), sinA = Math.sin(Ship.angle - Math.PI / 2);
+  const depth = dx * cosA + dy * sinA;
+  const right = dx * (-sinA) + dy * cosA;
+  const camZ = depth + 400;
+  if (camZ < 10) return { s: -1 };
+  const scale = 700 / camZ;
+  return { px: W / 2 + right * scale, py: H / 2 - (z_height - 100) * scale, s: scale, alpha: Math.max(0, 1 - camZ / 9000), camZ };
+}
+
+function resolveMartian(choice) {
+  document.getElementById('martian-dialog').style.display = 'none';
+  Ship.Ek = 100; Ship.M = 0; Ship.Dt = 0;
+  Ship.state = choice === 1 ? 'resonant' : 'flying';
+}
+
+// ═══════════ FYZIKA (gameSpeed = globálny spomaľovač) ═══════════
+function updatePhysics() {
+  if (menuOpen || Ship.state === 'paused' || Ship.state === 'landed') return;
+  const tutMsg = document.getElementById('tutorial-msg');
+
+  if (tutorialStage === 0) {
+    if (Math.abs(Ship.angle - initialAngle) > 0.8) {
+      tutorialStage = 1; tutMsg.innerHTML = T().tut2;
+      tutMsg.style.color = '#3ef0a0'; tutMsg.style.borderColor = '#3ef0a0';
+    }
+  } else if (tutorialStage === 1 && input.thrust) {
+    thrustTimer++;
+    if (thrustTimer > 60) { tutorialStage = 2; tutMsg.style.opacity = '0'; }
+  }
+
+  const dxE = Earth.x - Ship.x, dyE = Earth.y - Ship.y;
+  const distSqE = dxE * dxE + dyE * dyE, distE = Math.sqrt(distSqE);
+  const dxM = Moon.x - Ship.x, dyM = Moon.y - Ship.y, distM = Math.sqrt(dxM * dxM + dyM * dyM);
+  document.getElementById('ui-dist').innerText = Math.floor(distM);
+
+  if (distM < Moon.radius + 400 && Ship.state !== 'landed') {
+    Ship.state = 'landed';
+    document.getElementById('win-dialog').style.display = 'block';
+    if (tutMsg) tutMsg.style.display = 'none';
+    return;
+  }
+
+  if (distE < Earth.radius + 20) {
+    Ship.vx *= -0.9; Ship.vy *= -0.9;
+    Ship.x += Ship.vx * 2; Ship.y += Ship.vy * 2;
+    if (tutorialStage === 2) Ship.Ek -= 5;
+  }
+
+  const safeDistSqE = distSqE + 1000;
+  const gxE = (dxE / distE) * (Earth.mass / safeDistSqE);
+  const gyE = (dyE / distE) * (Earth.mass / safeDistSqE);
+
+  let targetBank = 0;
+  const rot = 0.05 * gameSpeed;
+  if (input.left)  { Ship.angle -= rot; targetBank = -0.4; }
+  if (input.right) { Ship.angle += rot; targetBank = 0.4; }
+  Ship.bankAngle += (targetBank - Ship.bankAngle) * 0.1;
+
+  Ship.thrust = input.thrust ? 0.45 : 0;
+
+  if (Ship.state === 'resonant') {
+    const targetA = Math.atan2(dyM, dxM);
+    Ship.vx += (Math.cos(targetA) * 16 - Ship.vx) * 0.04 * gameSpeed;
+    Ship.vy += (Math.sin(targetA) * 16 - Ship.vy) * 0.04 * gameSpeed;
+    const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+    let diff = velocityAngle - Ship.angle;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    Ship.angle += diff * 0.1 * gameSpeed;
+    const vMag = Math.sqrt(Ship.vx * Ship.vx + Ship.vy * Ship.vy);
+    Ship.thrust = (Math.abs(diff) > 0.05 || vMag < 14) ? 0.7 : 0;
+    Ship.bankAngle *= 0.9;
+  }
+
+  const tx = Math.cos(Ship.angle) * Ship.thrust;
+  const ty = Math.sin(Ship.angle) * Ship.thrust;
+
+  const dotProduct = (tx * gxE) + (ty * gyE);
+  if (Ship.thrust > 0 && dotProduct < 0 && Ship.state !== 'resonant' && tutorialStage === 2) {
+    Ship.M += 0.02; Ship.Dt = (Ship.I * Ship.I) + Ship.M; Ship.Ek -= Ship.Dt * 0.04;
+  } else {
+    Ship.M = Math.max(0, Ship.M - 0.01); Ship.Dt = Ship.M;
+  }
+
+  if (Ship.Ek <= 35 && Ship.state === 'flying' && !Ship.hasTriggeredMartian) {
+    Ship.state = 'paused'; Ship.hasTriggeredMartian = true;
+    document.getElementById('martian-dialog').style.display = 'block';
+    input.thrust = false;
+  }
+
+  Ship.vx += (gxE + tx) * gameSpeed;
+  Ship.vy += (gyE + ty) * gameSpeed;
+  Ship.vx *= (1 - 0.005 * gameSpeed); Ship.vy *= (1 - 0.005 * gameSpeed);
+  Ship.x += Ship.vx * gameSpeed; Ship.y += Ship.vy * gameSpeed;
+
+  document.getElementById('ui-ek').innerText = Math.max(0, Ship.Ek).toFixed(1);
+  document.getElementById('ui-dt').innerText = Ship.Dt.toFixed(2);
+  document.getElementById('ui-ek').style.color = Ship.Ek > 50 ? '#3ef0a0' : (Ship.Ek > 35 ? '#f0d040' : '#f05050');
+}
+
+// ═══════════ RENDER ═══════════
+function draw() {
+  ctx.fillStyle = 'rgba(3, 5, 10, 0.4)'; ctx.fillRect(0, 0, W, H);
+
+  const ePt = project3D(Earth.x, Earth.y, 0);
+  if (ePt.s > 0) {
+    const eRadius = Earth.radius * ePt.s;
+    const grd = ctx.createRadialGradient(ePt.px, ePt.py, 0, ePt.px, ePt.py, eRadius);
+    grd.addColorStop(0, `rgba(20, 70, 160, ${ePt.alpha})`);
+    grd.addColorStop(0.8, `rgba(10, 30, 80, ${ePt.alpha})`);
+    grd.addColorStop(1, `rgba(5, 15, 30, 0)`);
+    ctx.beginPath(); ctx.arc(ePt.px, ePt.py, eRadius, 0, Math.PI * 2); ctx.fillStyle = grd; ctx.fill();
+    ctx.strokeStyle = `rgba(50, 130, 220, ${ePt.alpha * 0.5})`; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  const chaosFactor = Ship.Dt * 4; ctx.lineWidth = 1.2;
+  particles.forEach(p => {
+    let dx = p.x - Ship.x, dy = p.y - Ship.y;
+    if (dx > 5000) p.x -= 10000; else if (dx < -5000) p.x += 10000;
+    if (dy > 5000) p.y -= 10000; else if (dy < -5000) p.y += 10000;
+    let px = p.x + (Math.random() - 0.5) * chaosFactor, py = p.y + (Math.random() - 0.5) * chaosFactor;
+    const pt0 = project3D(px, py, p.z_height);
+    const pt1 = project3D(px - Ship.vx * 3, py - Ship.vy * 3, p.z_height);
+    if (pt0.s > 0 && pt1.s > 0) {
+      let hue = 220;
+      if (Ship.state === 'resonant') hue = 150;
+      else if (Ship.Dt > 0.5) hue = Math.max(0, 220 - Ship.Dt * 50);
+      ctx.strokeStyle = `hsla(${hue}, 100%, ${50 + p.speed * 10}%, ${pt0.alpha})`;
+      ctx.beginPath(); ctx.moveTo(pt0.px, pt0.py); ctx.lineTo(pt1.px, pt1.py); ctx.stroke();
+    }
+  });
+
+  const mPt = project3D(Moon.x, Moon.y, 0);
+  if (mPt.s > 0) {
+    ctx.beginPath(); ctx.arc(mPt.px, mPt.py, Moon.radius * mPt.s, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(200, 200, 220, ${mPt.alpha})`; ctx.fill();
+  }
+
+  ctx.save();
+  ctx.translate(W / 2, H / 2 + 100);
+
+  const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+  const relVelocityAngle = velocityAngle - Ship.angle + Math.PI / 2;
+  const velMag = Math.sqrt(Ship.vx * Ship.vx + Ship.vy * Ship.vy);
+  ctx.save();
+  ctx.rotate(relVelocityAngle);
+  const driftDisplayDist = Math.min(velMag * 8, 80);
+  ctx.beginPath();
+  ctx.arc(0, -driftDisplayDist, 6, 0, Math.PI * 2);
+  ctx.moveTo(-10, -driftDisplayDist); ctx.lineTo(10, -driftDisplayDist);
+  ctx.moveTo(0, -driftDisplayDist - 4); ctx.lineTo(0, -driftDisplayDist - 10);
+  ctx.strokeStyle = 'rgba(240, 208, 64, 0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.restore();
+
+  const targetAngle = Math.atan2(Moon.y - Ship.y, Moon.x - Ship.x);
+  ctx.save();
+  ctx.rotate(targetAngle - Ship.angle + Math.PI / 2);
+  ctx.beginPath(); ctx.moveTo(0, -65); ctx.lineTo(6, -50); ctx.lineTo(-6, -50); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill();
+  ctx.restore();
+
+  ctx.rotate(Ship.bankAngle);
+  const shipColor = Ship.Dt > 1.0 ? '#f05050' : (Ship.state === 'resonant' ? '#3ef0a0' : '#e0e8f0');
+  const sScale = 18;
+  ctx.beginPath();
+  ctx.moveTo(0, -sScale); ctx.lineTo(sScale * 0.7, sScale); ctx.lineTo(-sScale * 0.7, sScale); ctx.closePath();
+  ctx.strokeStyle = shipColor; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = 'rgba(8,12,18,0.9)'; ctx.fill();
+  if (Ship.thrust > 0) {
+    ctx.beginPath();
+    ctx.moveTo(0, sScale * 1.2); ctx.lineTo(sScale * 0.4, sScale * 2.5 + Math.random() * 8); ctx.lineTo(-sScale * 0.4, sScale * 2.5 + Math.random() * 8); ctx.closePath();
+    ctx.fillStyle = (Ship.Dt > 0.5) ? '#f05050' : shipColor; ctx.fill();
+  }
+  ctx.restore();
+
+  drawControls();
+}
+
+function drawControls() {
+  if (menuOpen || Ship.state === 'landed') return;
+  const z = zones();
+  function btn(c, glyph, active) {
+    ctx.beginPath(); ctx.arc(c.x, c.y, z.r, 0, Math.PI * 2);
+    ctx.fillStyle = active ? 'rgba(62,240,160,0.22)' : 'rgba(20,30,45,0.30)'; ctx.fill();
+    ctx.strokeStyle = active ? '#3ef0a0' : 'rgba(120,160,200,0.5)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = active ? '#3ef0a0' : '#9fb8d0';
+    ctx.font = Math.round(z.r * 0.9) + 'px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(glyph, c.x, c.y + 1);
+  }
+  btn(z.leftBtn, '◀', input.left);
+  btn(z.rightBtn, '▶', input.right);
+  btn(z.thrust, '▲', input.thrust);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+// Fixný časový krok — fyzika beží napevno 60×/s nezávisle od Hz displeja.
+// (Bez tohto by hra na 120 Hz telefóne bežala 2× rýchlejšie než na 60 Hz PC.)
+let _lastT = performance.now(), _acc = 0;
+const STEP = 1 / 60;
+function gameLoop(now) {
+  if (now === undefined) now = performance.now();
+  let frameT = (now - _lastT) / 1000; _lastT = now;
+  if (!isFinite(frameT) || frameT < 0) frameT = STEP;   // nikdy nezamrznúť na NaN
+  if (frameT > 0.25) frameT = 0.25;                      // ochrana proti špirále po lagu
+  _acc += frameT;
+  let guard = 0;
+  try {
+    while (_acc >= STEP && guard++ < 5) { updatePhysics(); _acc -= STEP; }
+    draw();
+  } catch (e) { console.error(e); }
+  requestAnimationFrame(gameLoop);
+}
+
+// ═══════════ MENU / JAZYK ═══════════
+let menuOpen = true;
+function applyLang() {
+  const t = T();
+  document.documentElement.lang = settings.lang;
+  document.getElementById('lbl-head').innerText = t.head;
+  document.getElementById('lbl-ek').innerText = t.ek;
+  document.getElementById('lbl-dt').innerText = t.dt;
+  document.getElementById('lbl-dist').innerText = t.dist;
+  document.getElementById('lbl-km').innerText = t.km;
+  document.getElementById('legend').innerHTML = t.legend;
+  const tm = document.getElementById('tutorial-msg');
+  if (tutorialStage === 0) tm.innerHTML = t.tut1; else if (tutorialStage === 1) tm.innerHTML = t.tut2;
+  document.getElementById('m-title').innerText = t.mTitle;
+  document.getElementById('m-text').innerHTML = t.mText;
+  document.getElementById('m-btn0').innerText = t.mBtn0;
+  document.getElementById('m-btn1').innerText = t.mBtn1;
+  document.getElementById('w-title').innerText = t.wTitle;
+  document.getElementById('w-text').innerHTML = t.wText;
+  document.getElementById('w-btn').innerText = t.wBtn;
+  document.getElementById('menu-sub').innerText = t.sub;
+  document.getElementById('m_start').innerText = t.start;
+  document.getElementById('lab-lang').innerText = t.labLang;
+  document.getElementById('lab-steer').innerText = t.labSteer;
+  document.getElementById('lab-diff').innerText = t.labDiff;
+  refreshOptUI();
+}
+function refreshOptUI() {
+  const t = T();
+  document.querySelectorAll('[data-lang]').forEach(b =>
+    b.classList.toggle('sel', b.dataset.lang === settings.lang));
+  const os = document.getElementById('opt-steer');
+  os.innerText = settings.steerSide === 'R' ? t.steerR : t.steerL; os.classList.add('sel');
+  const od = document.getElementById('opt-diff');
+  od.innerText = settings.beginner ? t.diffBeg : t.diffPro; od.classList.toggle('sel', settings.beginner);
+}
+function openMenu() { menuOpen = true; document.getElementById('menu').style.display = 'flex'; }
+function closeMenu() { menuOpen = false; document.getElementById('menu').style.display = 'none'; }
+
+document.querySelectorAll('[data-lang]').forEach(b =>
+  b.addEventListener('click', () => { settings.lang = b.dataset.lang; saveSettings(); applyLang(); }));
+document.getElementById('opt-steer').addEventListener('click', () => {
+  settings.steerSide = settings.steerSide === 'R' ? 'L' : 'R'; saveSettings(); refreshOptUI();
+});
+document.getElementById('opt-diff').addEventListener('click', () => {
+  settings.beginner = !settings.beginner; gameSpeed = settings.beginner ? 0.6 : 1.0; saveSettings(); refreshOptUI();
+});
+
+applyLang();
+openMenu();
+gameLoop();
+</script>
+</body>
+</html>
