@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>OSVA: Level 6 - Vektorový Sklz a Neptún</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000205; color: #e0e8f0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none;
+    padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 20px calc(20px + env(safe-area-inset-left)); }
+  .metric { font-size: 14px; margin-bottom: 8px; letter-spacing: 1px; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
+  .val { font-weight: bold; }
+  
+  .dialog-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(5, 10, 20, 0.95); border: 1px solid #00ffff; padding: 30px;
+    border-radius: 6px; text-align: center; display: none; pointer-events: auto;
+    box-shadow: 0 0 50px rgba(0, 255, 255, 0.2); max-width: 650px; z-index: 100;
+    max-height: 88vh; overflow-y: auto;
+  }
+  .dialog-title { font-size: 18px; margin-bottom: 15px; letter-spacing: 2px; color: #00ffff; text-transform: uppercase; }
+  .dialog-text { font-size: 14px; line-height: 1.6; color: #a0d0e0; margin-bottom: 25px; }
+  button {
+    background: #05101a; border: 1px solid #1a3a5a; color: #80c0f0;
+    padding: 14px 15px; font-size: 13px; cursor: pointer; border-radius: 4px;
+    font-family: monospace; margin: 6px 0; width: 100%; transition: all 0.2s; text-align: left;
+  }
+  button:hover { background: #102a4a; border-color: #00ffff; box-shadow: 0 0 15px rgba(0,255,255,0.3); }
+  .btn-osva { border-color: #3ef0a0; color: #3ef0a0; }
+  .btn-osva:hover { background: rgba(62,240,160,0.1); border-color: #50ffb0; }
+
+  #legend {
+    position: absolute; bottom: 20px; left: 20px; font-size: 11px; color: #6a8a9a; pointer-events: none;
+    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 4px; border: 1px solid #1a2a3a;
+  }
+  
+  #warn-hud {
+    position: absolute; top: 120px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; color: #f05050; letter-spacing: 2px; text-align: center;
+    background: rgba(20, 5, 5, 0.9); padding: 15px 30px; border-radius: 4px; border: 1px solid #f05050;
+    text-shadow: 0 0 10px rgba(240, 80, 80, 0.5); display: none;
+  }
+
+  #fact-hud {
+    position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; color: #00ffff; letter-spacing: 2px; text-align: center;
+    background: rgba(5, 15, 25, 0.9); padding: 15px 30px; border-radius: 4px; border: 1px solid #00ffff;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.5); display: none; width: 80%; max-width: 800px;
+  }
+
+  #btn-gear {
+    position: absolute; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right));
+    pointer-events: auto; background: #05101a; border: 1px solid #4a7fa5; color: #cfe4ff;
+    padding: 7px 11px; font-size: 16px; border-radius: 6px; cursor: pointer; z-index: 120;
+  }
+  #settings-panel {
+    position: absolute; inset: 0; display: none; z-index: 200; pointer-events: auto;
+    flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px;
+    background: radial-gradient(circle at 50% 40%, rgba(8,16,30,.7), rgba(2,4,8,.96));
+  }
+  #settings-panel.open { display: flex; }
+  #settings-panel .srow { display: flex; align-items: center; gap: 12px; }
+  #settings-panel .srow span { color: #80a0c0; min-width: 92px; text-align: right; font-size: 13px; }
+  #settings-panel button { width: auto; margin: 0; padding: 12px 18px; text-align: center; min-width: 110px; }
+  #set-close { margin-top: 22px; border-color: #3ef0a0; color: #3ef0a0; }
+  @media (max-width: 680px), (pointer: coarse) {
+    #legend { display: none; }
+    .metric { font-size: 12px; margin-bottom: 5px; }
+    .dialog-box { width: calc(100% - 20px); max-width: 480px; padding: 18px; }
+    .dialog-title { font-size: 16px; margin-bottom: 10px; }
+    .dialog-text { font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+    button { padding: 12px; font-size: 12px; }
+    #settings-panel button { padding: 12px 18px; }
+  }
+
+  #error-screen {
+    position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: #400000; color: white; padding: 40px; display: none; z-index: 9999;
+  }
+</style>
+</head>
+<body>
+
+<div id="error-screen"></div>
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-layer">
+  <div style="color:#4a7fa5; font-size: 10px; margin-bottom: 15px; text-transform: uppercase;">L6: HLBOKÝ VESMÍR -> NEPTÚN</div>
+  <div class="metric" style="color: #3ef0a0;">Energia Koherencie: <span id="ui-ek" class="val">100.0</span>%</div>
+  <div class="metric" style="color: #f05050;">Vnútorný Odpor (Dt): <span id="ui-dt" class="val">0.00</span></div>
+  <div class="metric" style="color: #40aaff;">Vzdialenosť na Neptún: <span id="ui-dist" class="val">---</span> km</div>
+</div>
+
+<button id="btn-gear" onclick="openSettings()">⚙</button>
+<div id="settings-panel">
+  <div class="srow"><span>Režim</span><button id="set-diff"></button></div>
+  <div class="srow"><span>Ovládanie</span><button id="set-steer"></button></div>
+  <button id="set-close" onclick="closeSettings()">Späť do hry</button>
+</div>
+
+<div id="warn-hud">⚠ ODPOR PROTI PRÚDU! PRISPÔSOB VEKTOR!</div>
+<div id="fact-hud">Analýza dát Neptúnu...</div>
+
+<div id="legend">
+  <span style="color:#00ffff;">≈ Víchrica:</span> Pusti plyn, natoč nos po prúde<br>
+  <span style="color:#f0d040;">⨀ Vektor:</span> Skutočný pohyb<br>
+  <span style="color:#ffffff;">◁ Radar:</span> Neptún<br>
+  <strong>Ovl:</strong> Šípky (Rotácia), HORE (Ťah)
+</div>
+
+<div id="martian-dialog" class="dialog-box">
+  <div class="dialog-title">ZÁSAH SYSTÉMU: ADAPTABILITA (ŠOK)</div>
+  <div class="dialog-text">
+    Náhle ťa zasiahol masívny bočný prúd (Gravitačná víchrica). Vyviedlo ťa to z kurzu.<br><br>
+    Toto prekvapenie nie je chyba, je to test adaptability. Nebojuj s vetrom. Ak sa pokúsiš tlačiť motorom proti nemu, zničíš sa. Namiesto toho <strong>pusti plyn a natoč nos presne po smere vetra</strong>. Nechaj sa zrýchliť.
+  </div>
+  <button onclick="resolveMartian(0)" style="border-color:#f05050; color:#f05050;">1. [Hrubá sila] Budem bojovať proti prúdu, kým sa nevrátim na pôvodnú čiaru.</button>
+  <button class="btn-osva" onclick="resolveMartian(1)">2. [Geometria Vesmíru] Prestanem vzdorovať. Prijmem zmenu, zosúladím sa s prúdom a využijem ho.</button>
+</div>
+
+<div id="approach-dialog" class="dialog-box" style="border-color:#00ffff;">
+  <div class="dialog-title" style="color:#00ffff;">ZÁSAH SYSTÉMU: PRIBLÍŽENIE K NEPTÚNU</div>
+  <div class="dialog-text">
+    Prežil si víchrice a letíš vpred extrémnou rýchlosťou. Cieľ je na dosah.<br><br>
+    <strong>Akým spôsobom prevedieš finálnu inzerkciu?</strong>
+  </div>
+  <button onclick="resolveApproach(0)" style="border-color:#f05050; color:#f05050;">1. [Hrubá sila] Manuálne. Tlak motora proti zotrvačnosti.</button>
+  <button class="btn-osva" onclick="resolveApproach(1)">2. [Geometria Vesmíru] Autonavigácia. Zladiť získaný vektor priamo na planétu.</button>
+</div>
+
+<div id="quiz-dialog" class="dialog-box" style="border-color:#00ffff;">
+  <div class="dialog-title" style="color:#00ffff;">ZÁVEREČNÁ ANALÝZA DÁT</div>
+  <div class="dialog-text">
+    Skenovanie planéty dokončené.<br><br>
+    <strong>Otázka: Akou rýchlosťou fúkajú vetry na Neptúne?</strong>
+  </div>
+  <button onclick="resolveQuiz(0)">1. Okolo 300 km/h</button>
+  <button onclick="resolveQuiz(1)">2. Extrémnych 2 100 km/h (najrýchlejšie v sústave)</button>
+  <button onclick="resolveQuiz(0)">3. Nefúka tam vietor, je to ľadovec</button>
+</div>
+
+<div id="win-dialog" class="dialog-box" style="border-color:#3ef0a0;">
+  <div class="dialog-title" id="win-title" style="color: #3ef0a0;">ZACHYTENIE ÚSPEŠNÉ</div>
+  <div class="dialog-text" id="win-text">
+    Vitaj na orbite Neptúnu.<br><br>
+    Nevzdoroval si nečakaným zmenám. Šok si premenil na adaptabilitu a cudzí prúd si využil vo svoj prospech.
+  </div>
+  <button class="btn-osva" style="text-align:center;" onclick="location.reload()">Dokončiť Simuláciu</button>
+</div>
+
+<script>
+window.onerror = function(msg, url, line) {
+  const errScreen = document.getElementById('error-screen');
+  if(errScreen) {
+    errScreen.style.display = 'block';
+    errScreen.innerHTML = `<h2>Kritická chyba:</h2><p>${msg}</p><p>Riadok: ${line}</p>`;
+  }
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+let DPR;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize); resize();
+
+let gameSpeed = 0.6;
+let isBeginner = true;
+let menuOpen = false;
+
+const neptuneFacts = [
+  "SKENOVANIE DÁT: Rok = 165 pozemských rokov | Polomer = 24 622 km | Vzdialenosť = 30.07 AU",
+  "FAKT: Ľadový obor, zloženie z vody, amoniaku a metánu (ktorý mu dáva modrú farbu).",
+  "FAKT: Najsilnejšie vetry v slnečnej sústave — dosahujú až 2 100 km/h.",
+  "FAKT: Má 14 známych mesiacov, najväčší je Triton s retrográdnou orbitou.",
+  "FAKT: Deň trvá približne 16 hodín.",
+  "FAKT: Bol prvou planétou objavenou pomocou matematických výpočtov pred jej pozorovaním."
+];
+let factTimer = 0;
+
+const Neptun = { x: 0, y: -60000, mass: 10000, radius: 450 }; 
+
+const Ship = {
+  x: 0, y: 0,          
+  vx: 0, vy: -15.0,            
+  angle: -Math.PI/2,               
+  thrust: 0, Ek: 100, Dt: 0,
+  state: 'flying', 
+  bankAngle: 0,
+  hasTriggeredMartian: false,
+  hasTriggeredApproach: false
+};
+
+// Gravitačné víchrice (Rieky)
+const winds = [
+  { yMin: -10000, yMax: -16000, vx: 35, vy: -5, angle: Math.atan2(-5, 35) },
+  { yMin: -25000, yMax: -32000, vx: -40, vy: -2, angle: Math.atan2(-2, -40) },
+  { yMin: -40000, yMax: -45000, vx: 30, vy: -10, angle: Math.atan2(-10, 30) }
+];
+
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ===== MOBILNÉ DOTYKOVÉ OVLÁDANIE + NASTAVENIA (⚙) =====
+let steerSide = 'R';
+try { const s = JSON.parse(localStorage.getItem('osva_settings') || '{}');
+  if (s.steerSide) steerSide = s.steerSide;
+  if (typeof s.beginner === 'boolean') { isBeginner = s.beginner; gameSpeed = isBeginner ? 0.6 : 1.0; }
+} catch (e) {}
+const ACTIONS = [];
+function saveSettings() {
+  try { const s = JSON.parse(localStorage.getItem('osva_settings') || '{}');
+    s.steerSide = steerSide; s.beginner = isBeginner;
+    localStorage.setItem('osva_settings', JSON.stringify(s)); } catch (e) {}
+}
+function refreshPanel() {
+  document.getElementById('set-diff').innerText = isBeginner ? 'Začiatočník' : 'Profík';
+  document.getElementById('set-steer').innerText = steerSide === 'R' ? 'Vpravo' : 'Vľavo';
+}
+function openSettings() { menuOpen = true; document.getElementById('settings-panel').classList.add('open'); refreshPanel(); }
+function closeSettings() { menuOpen = false; document.getElementById('settings-panel').classList.remove('open'); }
+document.getElementById('set-diff').addEventListener('click', function () { isBeginner = !isBeginner; gameSpeed = isBeginner ? 0.6 : 1.0; saveSettings(); refreshPanel(); });
+document.getElementById('set-steer').addEventListener('click', function () { steerSide = (steerSide === 'R' ? 'L' : 'R'); saveSettings(); refreshPanel(); });
+function ctrlZones() {
+  const r = Math.max(34, Math.min(W, H) * 0.085);
+  const pad = r * 0.9 + 16, by = H - r - 22, gap = r * 2.3;
+  const right = steerSide === 'R';
+  const sx = right ? W - pad - r : pad + r, dir = right ? -1 : 1;
+  const a = { x: sx, y: by }, b = { x: sx + dir * gap, y: by };
+  let Lb, Rb; if (a.x < b.x) { Lb = a; Rb = b; } else { Lb = b; Rb = a; }
+  const tx = right ? pad + r : W - pad - r;
+  const actions = ACTIONS.map(function (A, i) { return { x: tx, y: by - ((i + 1) * (2 * r + 22)), key: A.key, glyph: A.glyph, cap: A.cap }; });
+  return { Lb, Rb, thrust: { x: tx, y: by }, actions, r };
+}
+function refreshTouch(e) {
+  e.preventDefault();
+  const z = ctrlZones(), hit = z.r * 1.3;
+  keys['ArrowLeft'] = keys['ArrowRight'] = keys['ArrowUp'] = false;
+  z.actions.forEach(function (a) { keys[a.key] = false; });
+  for (const t of e.touches) {
+    const x = t.clientX, y = t.clientY; let done = false;
+    for (const a of z.actions) { if (Math.hypot(x - a.x, y - a.y) < hit) { keys[a.key] = true; done = true; break; } }
+    if (done) continue;
+    if (Math.hypot(x - z.thrust.x, y - z.thrust.y) < hit) keys['ArrowUp'] = true;
+    else if (Math.hypot(x - z.Lb.x, y - z.Lb.y) < hit) keys['ArrowLeft'] = true;
+    else if (Math.hypot(x - z.Rb.x, y - z.Rb.y) < hit) keys['ArrowRight'] = true;
+  }
+}
+['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function (ev) { canvas.addEventListener(ev, refreshTouch, { passive: false }); });
+function drawControls() {
+  if (Ship.state === 'landed') return;
+  const z = ctrlZones();
+  function b(c, g, on, cap) {
+    ctx.beginPath(); ctx.arc(c.x, c.y, z.r, 0, Math.PI * 2);
+    ctx.fillStyle = on ? 'rgba(62,240,160,0.22)' : 'rgba(20,30,45,0.30)'; ctx.fill();
+    ctx.strokeStyle = on ? '#3ef0a0' : 'rgba(120,160,200,0.5)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = on ? '#3ef0a0' : '#9fb8d0'; ctx.font = Math.round(z.r * 0.9) + 'px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g, c.x, c.y + 1);
+    if (cap) { ctx.font = '10px monospace'; ctx.fillStyle = '#7186a0'; ctx.fillText(cap, c.x, c.y + z.r + 11); }
+  }
+  b(z.Lb, '◀', keys['ArrowLeft']); b(z.Rb, '▶', keys['ArrowRight']); b(z.thrust, '▲', keys['ArrowUp']);
+  z.actions.forEach(function (a) { b(a, a.glyph, keys[a.key], a.cap); });
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+let backgroundStars = [];
+for(let i=0; i<600; i++) {
+  backgroundStars.push({
+    x: (Math.random()-0.5)*25000,
+    y: (Math.random()-0.5)*25000,
+    z_height: (Math.random()-0.5)*8000
+  });
+}
+
+function project3D(x, y, z_height) {
+  const dx = x - Ship.x, dy = y - Ship.y;
+  const cosA = Math.cos(Ship.angle), sinA = Math.sin(Ship.angle);
+  const depth = dx * cosA + dy * sinA;
+  const right = dx * (-sinA) + dy * cosA;
+  const camZ = depth + 400; 
+  if (camZ < 10) return { s: -1 }; 
+  const scale = 700 / camZ;
+  return { 
+    px: W/2 + right * scale, 
+    py: H/2 - (z_height - 100) * scale, 
+    s: scale, 
+    alpha: parseFloat(Math.max(0, Math.min(1, 1 - (camZ / 18000))).toFixed(2)) 
+  };
+}
+
+function resolveMartian(choice) {
+  document.getElementById('martian-dialog').style.display = 'none';
+  Ship.state = 'flying';
+}
+
+function resolveApproach(choice) {
+  document.getElementById('approach-dialog').style.display = 'none';
+  Ship.state = choice === 1 ? 'auto_approach' : 'manual_approach';
+}
+
+function resolveQuiz(isCorrect) {
+  document.getElementById('quiz-dialog').style.display = 'none';
+  const winText = document.getElementById('win-text');
+  
+  if (isCorrect === 1) {
+    Ship.Ek = Math.min(100, Ship.Ek + 30);
+    winText.innerHTML = `<strong>Odpoveď SPRÁVNA!</strong> Energia dobitá o +30%.<br><br>Vitaj na orbite Neptúnu. Využil si extrémnu zotrvačnosť a adaptoval si sa na šok.`;
+  } else {
+    winText.innerHTML = `<strong>Odpoveď NESPRÁVNA.</strong><br><br>Vitaj na orbite Neptúnu. Pristátie úspešné, no bez extra energie.`;
+  }
+  Ship.state = 'landed';
+  document.getElementById('win-dialog').style.display = 'block';
+  document.getElementById('fact-hud').style.display = 'none';
+}
+
+function updatePhysics() {
+  if (menuOpen || Ship.state === 'paused' || Ship.state === 'landed' || Ship.state === 'quiz') return;
+
+  const dxN = Neptun.x - Ship.x, dyN = Neptun.y - Ship.y;
+  const distN = Math.sqrt(dxN*dxN + dyN*dyN);
+  document.getElementById('ui-dist').innerText = Math.floor(distN);
+
+  let activeWind = null;
+  winds.forEach(w => {
+    if (Ship.y < w.yMin && Ship.y > w.yMax) activeWind = w;
+  });
+
+  if (activeWind && !Ship.hasTriggeredMartian) {
+    Ship.state = 'paused';
+    Ship.hasTriggeredMartian = true;
+    document.getElementById('martian-dialog').style.display = 'block';
+    keys['ArrowUp'] = false;
+    return;
+  }
+
+  if (distN < 8000 && !Ship.hasTriggeredApproach) {
+    Ship.state = 'paused';
+    Ship.hasTriggeredApproach = true;
+    document.getElementById('approach-dialog').style.display = 'block';
+    keys['ArrowUp'] = false;
+    return;
+  }
+
+  if (distN < Neptun.radius + 1000 && Ship.state === 'auto_approach') {
+    Ship.state = 'quiz';
+    document.getElementById('quiz-dialog').style.display = 'block';
+    return;
+  } else if (distN < Neptun.radius + 1000 && Ship.state === 'manual_approach') {
+    Ship.state = 'landed';
+    document.getElementById('win-dialog').style.display = 'block';
+    return;
+  }
+
+  let targetBank = 0;
+  Ship.thrust = 0;
+
+  if (Ship.state === 'auto_approach') {
+    const targetA = Math.atan2(dyN, dxN);
+    let diff = targetA - Ship.angle;
+    while(diff < -Math.PI) diff += 2*Math.PI;
+    while(diff > Math.PI) diff -= 2*Math.PI;
+    Ship.angle += diff * 0.15;
+    
+    Ship.vx += (Math.cos(targetA) * 6.0 - Ship.vx) * 0.08 * gameSpeed;
+    Ship.vy += (Math.sin(targetA) * 6.0 - Ship.vy) * 0.08 * gameSpeed;
+    Ship.thrust = 0.3; 
+    
+    factTimer += gameSpeed;
+    let factIndex = Math.floor(factTimer / 300); 
+    if (factIndex >= neptuneFacts.length) factIndex = neptuneFacts.length - 1; 
+    
+    const factHud = document.getElementById('fact-hud');
+    factHud.innerText = neptuneFacts[factIndex];
+    factHud.style.display = 'block';
+
+  } else if (Ship.state === 'manual_approach') {
+    if (keys['ArrowLeft']) { Ship.angle -= 0.05; targetBank = -0.4; }
+    if (keys['ArrowRight']) { Ship.angle += 0.05; targetBank = 0.4; }
+    if (keys['ArrowUp']) Ship.thrust = 0.8;
+
+    Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+    Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+    Ship.vx *= 0.94; Ship.vy *= 0.94; 
+
+  } else {
+    // Bežný let a zóna vetra
+    if (keys['ArrowLeft']) { Ship.angle -= 0.06; targetBank = -0.4; }
+    if (keys['ArrowRight']) { Ship.angle += 0.06; targetBank = 0.4; }
+    if (keys['ArrowUp']) Ship.thrust = 0.5;
+
+    let struggling = false;
+
+    if (activeWind) {
+      // Unášanie vetrom
+      Ship.vx += (activeWind.vx - Ship.vx) * 0.02 * gameSpeed;
+      Ship.vy += (activeWind.vy - Ship.vy) * 0.02 * gameSpeed;
+
+      // Akcia hráča vs Smer vetra
+      const shipDirVectorX = Math.cos(Ship.angle);
+      const shipDirVectorY = Math.sin(Ship.angle);
+      const windLen = Math.sqrt(activeWind.vx**2 + activeWind.vy**2);
+      const windDirX = activeWind.vx / windLen;
+      const windDirY = activeWind.vy / windLen;
+      
+      const dotProduct = shipDirVectorX * windDirX + shipDirVectorY * windDirY;
+
+      if (keys['ArrowUp']) {
+        if (dotProduct < 0) {
+          // HRUBÁ SILA: Ťahá proti vetru (Panika)
+          struggling = true;
+          Ship.Dt += 0.2;
+          Ship.Ek -= 0.5;
+        } else if (dotProduct > 0.8) {
+          // Jemné pridávanie po vetre je OK, ale míňa palivo normálne
+        }
+      } else if (dotProduct > 0.8) {
+        // OSVA: Zavesený v prúde, bez ťahu
+        Ship.Dt = Math.max(0, Ship.Dt - 0.1);
+      }
+    }
+
+    if (struggling) {
+      document.getElementById('warn-hud').style.display = 'block';
+      if (Ship.Ek <= 0) {
+        Ship.state = 'paused';
+        document.getElementById('warn-hud').innerText = "☠ ZNIČENÝ ODPOROM. REŠTARTUJEM...";
+        setTimeout(() => location.reload(), 2000);
+      }
+    } else {
+      document.getElementById('warn-hud').style.display = 'none';
+      Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+      Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+    }
+    
+    Ship.vx *= 0.995; Ship.vy *= 0.995; 
+  }
+
+  Ship.bankAngle += (targetBank - Ship.bankAngle) * 0.1; 
+  Ship.x += Ship.vx * gameSpeed; 
+  Ship.y += Ship.vy * gameSpeed;
+
+  document.getElementById('ui-ek').innerText = Math.max(0, Ship.Ek).toFixed(1);
+  document.getElementById('ui-dt').innerText = Ship.Dt.toFixed(2);
+  document.getElementById('ui-ek').style.color = Ship.Ek > 50 ? '#3ef0a0' : '#f05050';
+}
+
+function draw() {
+  if (!W || !H) resize();
+  
+  const isFighting = document.getElementById('warn-hud').style.display === 'block';
+  ctx.fillStyle = isFighting ? 'rgba(30, 5, 5, 0.6)' : 'rgba(2, 4, 8, 0.6)'; 
+  ctx.fillRect(0, 0, W, H);
+
+  // Vykreslenie hviezd
+  ctx.lineWidth = 1.0;
+  backgroundStars.forEach((p, index) => {
+    let dx = p.x - Ship.x, dy = p.y - Ship.y;
+    if (dx > 12000) p.x -= 24000; else if (dx < -12000) p.x += 24000;
+    if (dy > 12000) p.y -= 24000; else if (dy < -12000) p.y += 24000;
+
+    // Aplikácia vizuálneho vetra na pozadie (na čiary)
+    let wvx = 0, wvy = 0;
+    winds.forEach(w => {
+      if (p.y < w.yMin && p.y > w.yMax) { wvx = w.vx * 3; wvy = w.vy * 3; }
+    });
+
+    const pt0 = project3D(p.x, p.y, p.z_height);
+    const pt1 = project3D(p.x - Ship.vx*2 - wvx, p.y - Ship.vy*2 - wvy, p.z_height); 
+
+    if(pt0.s > 0 && pt1.s > 0) {
+      if (wvx !== 0 || wvy !== 0) {
+        ctx.strokeStyle = `hsla(180, 100%, 70%, ${pt0.alpha * 0.6})`; // Jasný vietor
+      } else {
+        ctx.strokeStyle = `hsla(210, 30%, 40%, ${pt0.alpha * 0.3})`;
+      }
+      ctx.beginPath(); ctx.moveTo(pt0.px, pt0.py); ctx.lineTo(pt1.px, pt1.py); ctx.stroke();
+    }
+  });
+
+  const nPt = project3D(Neptun.x, Neptun.y, 0); 
+  if (nPt.s > 0) {
+    const nRadius = Neptun.radius * nPt.s;
+    ctx.beginPath(); ctx.arc(nPt.px, nPt.py, nRadius, 0, Math.PI*2);
+    const nGrd = ctx.createRadialGradient(nPt.px, nPt.py, 0, nPt.px, nPt.py, nRadius);
+    nGrd.addColorStop(0, `rgba(100, 180, 255, ${nPt.alpha})`);
+    nGrd.addColorStop(0.6, `rgba(30, 80, 200, ${nPt.alpha})`);
+    nGrd.addColorStop(1, `rgba(5, 20, 60, ${nPt.alpha})`);
+    ctx.fillStyle = nGrd; ctx.fill();
+  }
+
+  // --- LODE A HUD ---
+  ctx.save();
+  ctx.translate(W/2, H/2 + 100); 
+
+  const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+  const relVelocityAngle = velocityAngle - Ship.angle; 
+  const velMag = Math.sqrt(Ship.vx*Ship.vx + Ship.vy*Ship.vy);
+  
+  ctx.save();
+  ctx.rotate(relVelocityAngle);
+  const driftDisplayDist = Math.min(velMag * 8, 100); 
+  ctx.beginPath();
+  ctx.arc(0, -driftDisplayDist, 6, 0, Math.PI*2);
+  ctx.moveTo(-10, -driftDisplayDist); ctx.lineTo(10, -driftDisplayDist);
+  ctx.moveTo(0, -driftDisplayDist-4); ctx.lineTo(0, -driftDisplayDist-10);
+  ctx.strokeStyle = 'rgba(240, 208, 64, 0.9)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+  
+  const targetAngle = Math.atan2(Neptun.y - Ship.y, Neptun.x - Ship.x);
+  const relTargetAngle = targetAngle - Ship.angle; 
+  ctx.save();
+  ctx.rotate(relTargetAngle);
+  ctx.beginPath(); ctx.moveTo(0, -65); ctx.lineTo(6, -50); ctx.lineTo(-6, -50); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
+  ctx.restore();
+
+  // Indikátor Smeru Výchrice na Radare (Cyan farba)
+  let activeWindForRadar = null;
+  winds.forEach(w => { if (Ship.y < w.yMin && Ship.y > w.yMax) activeWindForRadar = w; });
+  
+  if (activeWindForRadar) {
+    const relWindAngle = activeWindForRadar.angle - Ship.angle;
+    ctx.save();
+    ctx.rotate(relWindAngle);
+    ctx.beginPath(); ctx.moveTo(0, -80); ctx.lineTo(8, -95); ctx.lineTo(-8, -95); ctx.closePath();
+    ctx.fillStyle = 'rgba(0,255,255,0.9)'; ctx.fill();
+    ctx.restore();
+  }
+
+  if (isFighting) ctx.translate((Math.random()-0.5)*12, (Math.random()-0.5)*12);
+
+  ctx.rotate(Ship.bankAngle);
+  const scale = 20; 
+  
+  ctx.beginPath();
+  ctx.moveTo(0, -scale); ctx.lineTo(scale*0.7, scale); ctx.lineTo(-scale*0.7, scale); ctx.closePath();
+  ctx.strokeStyle = isFighting ? '#f05050' : '#00ffff'; 
+  ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = 'rgba(5,10,15,0.9)'; ctx.fill();
+
+  if (Ship.thrust > 0) {
+    ctx.beginPath();
+    ctx.moveTo(0, scale*1.2); ctx.lineTo(scale*0.4, scale*2.5 + Math.random()*10); ctx.lineTo(-scale*0.4, scale*2.5 + Math.random()*10); ctx.closePath();
+    ctx.fillStyle = isFighting ? '#f05050' : '#00ffff'; ctx.fill();
+  }
+  ctx.restore();
+
+  drawControls();
+}
+
+// Fixný časový krok — fyzika 60×/s nezávisle od Hz displeja.
+let _lastT = performance.now(), _acc = 0;
+const STEP = 1 / 60;
+function gameLoop(now) {
+  if (now === undefined) now = performance.now();
+  let f = (now - _lastT) / 1000; _lastT = now;
+  if (!isFinite(f) || f < 0) f = STEP;
+  if (f > 0.25) f = 0.25;
+  _acc += f;
+  let g = 0;
+  try {
+    while (_acc >= STEP && g++ < 5) { updatePhysics(); _acc -= STEP; }
+    draw();
+  } catch (e) { console.error(e); }
+  requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

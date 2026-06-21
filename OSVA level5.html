@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>OSVA: Level 5 - Sémantický Filter a Urán</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #010408; color: #e0e8f0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none;
+    padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 20px calc(20px + env(safe-area-inset-left)); }
+  .metric { font-size: 14px; margin-bottom: 8px; letter-spacing: 1px; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
+  .val { font-weight: bold; }
+  
+  .dialog-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(8, 12, 20, 0.95); border: 1px solid #3ef0a0; padding: 30px;
+    border-radius: 6px; text-align: center; display: none; pointer-events: auto;
+    box-shadow: 0 0 50px rgba(62, 240, 160, 0.3); max-width: 650px; z-index: 100;
+    max-height: 88vh; overflow-y: auto;
+  }
+  .dialog-title { font-size: 18px; margin-bottom: 15px; letter-spacing: 2px; text-transform: uppercase; }
+  .dialog-text { font-size: 14px; line-height: 1.6; color: #a0c0d0; margin-bottom: 25px; }
+  button {
+    background: #111a24; border: 1px solid #2a4a6a; color: #80c0f0;
+    padding: 14px 15px; font-size: 13px; cursor: pointer; border-radius: 4px;
+    font-family: monospace; margin: 6px 0; width: 100%; transition: all 0.2s; text-align: left;
+  }
+  button:hover { background: #1a2a3a; border-color: #40aaff; box-shadow: 0 0 15px rgba(64,170,255,0.3); }
+  .btn-osva { border-color: #3ef0a0; color: #3ef0a0; }
+  .btn-osva:hover { background: rgba(62,240,160,0.1); border-color: #50ffb0; }
+
+  #legend {
+    position: absolute; bottom: 20px; left: 20px; font-size: 11px; color: #6a8a9a; pointer-events: none;
+    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 4px; border: 1px solid #1a2a3a;
+  }
+  #btn-gear {
+    position: absolute; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right));
+    pointer-events: auto; background: #1a2a3a; border: 1px solid #4a7fa5; color: #cfe4ff;
+    padding: 7px 11px; font-size: 16px; border-radius: 6px; cursor: pointer; z-index: 120;
+  }
+  #settings-panel {
+    position: absolute; inset: 0; display: none; z-index: 200; pointer-events: auto;
+    flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px;
+    background: radial-gradient(circle at 50% 40%, rgba(8,16,30,.7), rgba(2,4,8,.96));
+  }
+  #settings-panel.open { display: flex; }
+  #settings-panel .srow { display: flex; align-items: center; gap: 12px; }
+  #settings-panel .srow span { color: #80a0c0; min-width: 92px; text-align: right; font-size: 13px; }
+  #settings-panel button { width: auto; margin: 0; padding: 12px 18px; text-align: center; min-width: 110px; }
+  #set-close { margin-top: 22px; border-color: #3ef0a0; color: #3ef0a0; }
+  @media (max-width: 680px), (pointer: coarse) {
+    #legend { display: none; }
+    .metric { font-size: 12px; margin-bottom: 5px; }
+    .dialog-box { width: calc(100% - 20px); max-width: 480px; padding: 18px; }
+    .dialog-title { font-size: 16px; margin-bottom: 10px; }
+    .dialog-text { font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+    button { padding: 12px; font-size: 12px; }
+    #settings-panel button { padding: 12px 18px; }
+  }
+
+  #hud-status {
+    position: absolute; top: 120px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; letter-spacing: 2px; text-align: center;
+    padding: 15px 30px; border-radius: 4px; display: none; text-shadow: 0 0 10px rgba(0,0,0,0.8);
+  }
+  
+  .status-flow { color: #f0d040; border: 1px solid #f0d040; background: rgba(20, 15, 0, 0.9); }
+  .status-fixation { color: #888888; border: 1px solid #888888; background: rgba(15, 15, 15, 0.9); }
+
+  #error-screen {
+    position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: #400000; color: white; padding: 40px; display: none; z-index: 9999;
+  }
+</style>
+</head>
+<body>
+
+<div id="error-screen"></div>
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-layer">
+  <div style="color:#4a7fa5; font-size: 10px; margin-bottom: 15px; text-transform: uppercase;">L5: TOXICKÁ HMLOVINA -> URÁN</div>
+  <div class="metric" style="color: #3ef0a0;">Energia Koherencie: <span id="ui-ek" class="val">100.0</span>%</div>
+  <div class="metric" style="color: #f05050;">Vnútorný Odpor (Dt): <span id="ui-dt" class="val">0.00</span></div>
+  <div class="metric" style="color: #40aaff;">Vzdialenosť na Urán: <span id="ui-dist" class="val">---</span> km</div>
+</div>
+
+<div id="hud-status">STATUS...</div>
+
+<button id="btn-gear" onclick="openSettings()">⚙</button>
+<div id="settings-panel">
+  <div class="srow"><span>Režim</span><button id="set-diff"></button></div>
+  <div class="srow"><span>Ovládanie</span><button id="set-steer"></button></div>
+  <button id="set-close" onclick="closeSettings()">Späť do hry</button>
+</div>
+
+<div id="legend">
+  <span style="color:#3ef0a0;">◖ Sémantický Filter:</span> F (Odpudiť jed / Prijať energiu)<br>
+  <span style="color:#f0d040;">⨀ Vektor:</span> Skutočný pohyb<br>
+  <span style="color:#ffffff;">◁ Radar:</span> Urán<br>
+  <strong>Ovl:</strong> Šípky (Rotácia), HORE (Ťah)
+</div>
+
+<div id="start-dialog" class="dialog-box" style="display: block;">
+  <div class="dialog-title" style="color:#3ef0a0;">ZÁSAH SYSTÉMU: SÉMANTICKÝ FILTER</div>
+  <div class="dialog-text">
+    Vstupuješ do hmloviny. Miešajú sa tu častice čistej energie (Modré) a toxickej entropie (Zeleno-žlté).<br><br>
+    Hnus a znechutenie nie sú negatívne emócie. Sú to fundamentálne imunitné filtre tvojho systému. Musíš jasne selektovať. <br><br>
+    Aktivuj <strong>Kauzálny Filter (Drž F)</strong> pred nárazom. Filter odpudí toxický šum a absorbuje čistú energiu. Ak to neurobíš, systém sa infikuje a zacyklí.
+  </div>
+  <button class="btn-osva" onclick="startSimulation()">Aktivovať prúd</button>
+</div>
+
+<div id="win-dialog" class="dialog-box" style="border-color:#40aaff;">
+  <div class="dialog-title" style="color: #40aaff;">ZACHYTENIE ÚSPEŠNÉ</div>
+  <div class="dialog-text">
+    Vitaj na orbite Uránu.<br><br>
+    Tvoj filter bol dokonalý. Vpustil si len to, čo ťa posilnilo, a tvrdo si odrazil to, čo ťa oslabovalo. Tvoja termodynamická rovnica je v absolútnej rovnováhe.
+  </div>
+  <button class="btn-osva" style="text-align:center; border-color:#40aaff; color:#40aaff;" onclick="location.reload()">Reštartovať Simuláciu</button>
+</div>
+
+<script>
+window.onerror = function(msg, url, line) {
+  const errScreen = document.getElementById('error-screen');
+  if(errScreen) {
+    errScreen.style.display = 'block';
+    errScreen.innerHTML = `<h2>Kritická chyba:</h2><p>${msg}</p><p>Riadok: ${line}</p>`;
+  }
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+let DPR;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize); resize();
+
+let isBeginner = true;
+let gameSpeed = 0.6;        // Začiatočník 0.6 / Profík 0.8 (pôvodná vyladená rýchlosť)
+let menuOpen = false;
+
+const Uran = { x: 0, y: -45000, radius: 450 }; 
+
+const Ship = {
+  x: 0, y: 0,          
+  vx: 0, vy: -15.0,            
+  angle: -Math.PI/2,               
+  thrust: 0, Ek: 100, Dt: 0, 
+  state: 'paused', // paused, flying, flow, fixation, landed
+  bankAngle: 0,
+  filterActive: false,
+  toxicHits: 0
+};
+
+// Generovanie hmloviny (častice)
+const nebulaParticles = [];
+for(let i=0; i<400; i++) {
+  const isToxic = Math.random() > 0.4; // 60% toxických, 40% čistých
+  nebulaParticles.push({
+    x: (Math.random()-0.5)*12000,
+    y: -3000 - Math.random()*40000,
+    vx: (Math.random()-0.5)*4,
+    vy: (Math.random()-0.5)*4,
+    radius: isToxic ? 60 + Math.random()*40 : 40 + Math.random()*30,
+    type: isToxic ? 'toxic' : 'pure',
+    active: true
+  });
+}
+
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if(['Space', 'KeyF', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ===== MOBILNÉ DOTYKOVÉ OVLÁDANIE + NASTAVENIA (⚙) =====
+let steerSide = 'R';
+try { const s = JSON.parse(localStorage.getItem('osva_settings') || '{}');
+  if (s.steerSide) steerSide = s.steerSide;
+  if (typeof s.beginner === 'boolean') { isBeginner = s.beginner; gameSpeed = isBeginner ? 0.6 : 0.8; }
+} catch (e) {}
+const ACTIONS = [{ key: 'KeyF', glyph: '◈', cap: 'FILTER' }];
+function saveSettings() {
+  try { const s = JSON.parse(localStorage.getItem('osva_settings') || '{}');
+    s.steerSide = steerSide; s.beginner = isBeginner;
+    localStorage.setItem('osva_settings', JSON.stringify(s)); } catch (e) {}
+}
+function refreshPanel() {
+  document.getElementById('set-diff').innerText = isBeginner ? 'Začiatočník' : 'Profík';
+  document.getElementById('set-steer').innerText = steerSide === 'R' ? 'Vpravo' : 'Vľavo';
+}
+function openSettings() { menuOpen = true; document.getElementById('settings-panel').classList.add('open'); refreshPanel(); }
+function closeSettings() { menuOpen = false; document.getElementById('settings-panel').classList.remove('open'); }
+document.getElementById('set-diff').addEventListener('click', function () { isBeginner = !isBeginner; gameSpeed = isBeginner ? 0.6 : 0.8; saveSettings(); refreshPanel(); });
+document.getElementById('set-steer').addEventListener('click', function () { steerSide = (steerSide === 'R' ? 'L' : 'R'); saveSettings(); refreshPanel(); });
+function ctrlZones() {
+  const r = Math.max(34, Math.min(W, H) * 0.085);
+  const pad = r * 0.9 + 16, by = H - r - 22, gap = r * 2.3;
+  const right = steerSide === 'R';
+  const sx = right ? W - pad - r : pad + r, dir = right ? -1 : 1;
+  const a = { x: sx, y: by }, b = { x: sx + dir * gap, y: by };
+  let Lb, Rb; if (a.x < b.x) { Lb = a; Rb = b; } else { Lb = b; Rb = a; }
+  const tx = right ? pad + r : W - pad - r;
+  const actions = ACTIONS.map(function (A, i) { return { x: tx, y: by - ((i + 1) * (2 * r + 22)), key: A.key, glyph: A.glyph, cap: A.cap }; });
+  return { Lb, Rb, thrust: { x: tx, y: by }, actions, r };
+}
+function refreshTouch(e) {
+  e.preventDefault();
+  const z = ctrlZones(), hit = z.r * 1.3;
+  keys['ArrowLeft'] = keys['ArrowRight'] = keys['ArrowUp'] = false;
+  z.actions.forEach(function (a) { keys[a.key] = false; });
+  for (const t of e.touches) {
+    const x = t.clientX, y = t.clientY; let done = false;
+    for (const a of z.actions) { if (Math.hypot(x - a.x, y - a.y) < hit) { keys[a.key] = true; done = true; break; } }
+    if (done) continue;
+    if (Math.hypot(x - z.thrust.x, y - z.thrust.y) < hit) keys['ArrowUp'] = true;
+    else if (Math.hypot(x - z.Lb.x, y - z.Lb.y) < hit) keys['ArrowLeft'] = true;
+    else if (Math.hypot(x - z.Rb.x, y - z.Rb.y) < hit) keys['ArrowRight'] = true;
+  }
+}
+['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function (ev) { canvas.addEventListener(ev, refreshTouch, { passive: false }); });
+function drawControls() {
+  if (Ship.state === 'landed') return;
+  const z = ctrlZones();
+  function b(c, g, on, cap) {
+    ctx.beginPath(); ctx.arc(c.x, c.y, z.r, 0, Math.PI * 2);
+    ctx.fillStyle = on ? 'rgba(62,240,160,0.22)' : 'rgba(20,30,45,0.30)'; ctx.fill();
+    ctx.strokeStyle = on ? '#3ef0a0' : 'rgba(120,160,200,0.5)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = on ? '#3ef0a0' : '#9fb8d0'; ctx.font = Math.round(z.r * 0.9) + 'px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g, c.x, c.y + 1);
+    if (cap) { ctx.font = '10px monospace'; ctx.fillStyle = '#7186a0'; ctx.fillText(cap, c.x, c.y + z.r + 11); }
+  }
+  b(z.Lb, '◀', keys['ArrowLeft']); b(z.Rb, '▶', keys['ArrowRight']); b(z.thrust, '▲', keys['ArrowUp']);
+  z.actions.forEach(function (a) { b(a, a.glyph, keys[a.key], a.cap); });
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+let backgroundStars = [];
+for(let i=0; i<400; i++) {
+  backgroundStars.push({ x: (Math.random()-0.5)*20000, y: (Math.random()-0.5)*20000, z_height: (Math.random()-0.5)*8000 });
+}
+
+function project3D(x, y, z_height) {
+  const dx = x - Ship.x, dy = y - Ship.y;
+  const cosA = Math.cos(Ship.angle), sinA = Math.sin(Ship.angle);
+  const depth = dx * cosA + dy * sinA;
+  const right = dx * (-sinA) + dy * cosA;
+  const camZ = depth + 400; 
+  if (camZ < 10) return { s: -1 }; 
+  const scale = 700 / camZ;
+  return { 
+    px: W/2 + right * scale, 
+    py: H/2 - (z_height - 100) * scale, 
+    s: scale, 
+    alpha: parseFloat(Math.max(0, Math.min(1, 1 - (camZ / 16000))).toFixed(2)) 
+  };
+}
+
+function startSimulation() {
+  document.getElementById('start-dialog').style.display = 'none';
+  Ship.state = 'flying';
+}
+
+function updatePhysics() {
+  if (menuOpen || Ship.state === 'paused' || Ship.state === 'landed') return;
+
+  const dxU = Uran.x - Ship.x, dyU = Uran.y - Ship.y;
+  const distU = Math.sqrt(dxU*dxU + dyU*dyU);
+  document.getElementById('ui-dist').innerText = Math.floor(distU);
+
+  if (distU < Uran.radius + 600) {
+    Ship.state = 'landed';
+    document.getElementById('hud-status').style.display = 'none';
+    document.getElementById('win-dialog').style.display = 'block';
+    return;
+  }
+
+  Ship.filterActive = keys['KeyF'];
+  
+  // OSVA FLOW a FIXÁCIA Logika
+  const hudStatus = document.getElementById('hud-status');
+  
+  const targetA = Math.atan2(dyU, dxU);
+  const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+  let alignmentDiff = Math.abs(targetA - velocityAngle);
+  while(alignmentDiff > Math.PI) alignmentDiff -= 2*Math.PI;
+  
+  // Fixácia (Slučka)
+  if (Ship.toxicHits >= 5 || Ship.Dt >= 2.0) {
+    Ship.state = 'fixation';
+    hudStatus.className = 'status-fixation';
+    hudStatus.innerText = "TERMODYNAMICKÁ FIXÁCIA (SLUČKA)";
+    hudStatus.style.display = 'block';
+  } 
+  // Laminárny Flow
+  else if (Ship.Dt === 0 && Ship.Ek > 110 && Math.abs(alignmentDiff) < 0.15) {
+    Ship.state = 'flow';
+    hudStatus.className = 'status-flow';
+    hudStatus.innerText = "LAMINÁRNY TOK (REZONANCIA)";
+    hudStatus.style.display = 'block';
+  } else {
+    Ship.state = 'flying';
+    hudStatus.style.display = 'none';
+  }
+
+  // Riadenie na základe stavu
+  let targetBank = 0;
+  Ship.thrust = 0;
+
+  if (Ship.state === 'fixation') {
+    // Odpor, ťažké ovládanie
+    if (keys['ArrowLeft']) { Ship.angle -= 0.02; targetBank = -0.2; }
+    if (keys['ArrowRight']) { Ship.angle += 0.02; targetBank = 0.2; }
+    if (keys['ArrowUp']) Ship.thrust = 0.3; // Slabší ťah
+    Ship.vx *= 0.92; Ship.vy *= 0.92; // Rýchle strácanie hybnosti
+  } else if (Ship.state === 'flow') {
+    // Hladké zapadnutie
+    if (keys['ArrowLeft']) { Ship.angle -= 0.08; targetBank = -0.5; }
+    if (keys['ArrowRight']) { Ship.angle += 0.08; targetBank = 0.5; }
+    if (keys['ArrowUp']) Ship.thrust = 0.6; // Silný ťah
+    // Mechanické zrovnanie
+    let diff = velocityAngle - Ship.angle;
+    while(diff < -Math.PI) diff += 2*Math.PI;
+    while(diff > Math.PI) diff -= 2*Math.PI;
+    Ship.angle += diff * 0.1;
+    Ship.vx *= 0.998; Ship.vy *= 0.998; // Skoro nulové trenie
+  } else {
+    // Bežný let
+    if (keys['ArrowLeft']) { Ship.angle -= 0.05; targetBank = -0.4; }
+    if (keys['ArrowRight']) { Ship.angle += 0.05; targetBank = 0.4; }
+    if (keys['ArrowUp']) Ship.thrust = 0.45;
+    Ship.vx *= 0.99; Ship.vy *= 0.99;
+  }
+
+  Ship.bankAngle += (targetBank - Ship.bankAngle) * 0.1; 
+  Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+  Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+  
+  Ship.x += Ship.vx * gameSpeed; 
+  Ship.y += Ship.vy * gameSpeed;
+
+  // Detekcia hmloviny
+  nebulaParticles.forEach(p => {
+    if(!p.active) return;
+    p.x += p.vx * gameSpeed;
+    p.y += p.vy * gameSpeed;
+
+    const dxP = p.x - Ship.x, dyP = p.y - Ship.y;
+    const distP = Math.sqrt(dxP*dxP + dyP*dyP);
+
+    if (distP < p.radius + 20) {
+      if (Ship.filterActive) {
+        if (p.type === 'pure') {
+          // Absorbcia čistej energie
+          Ship.Ek += 10;
+          Ship.Dt = Math.max(0, Ship.Dt - 0.1);
+          p.active = false; // Zjedené
+        } else if (p.type === 'toxic') {
+          // Odrazenie hnusu
+          p.vx = -p.vx * 2 + Ship.vx;
+          p.vy = -p.vy * 2 + Ship.vy;
+          p.x += p.vx; p.y += p.vy;
+        }
+      } else {
+        // Náraz bez filtra
+        if (p.type === 'toxic') {
+          Ship.Dt += 0.5;
+          Ship.Ek -= 15;
+          Ship.toxicHits += 1;
+          p.active = false; // "Prilepí" sa na loď
+        }
+        // Čistá energia bez filtra len neškodne preletí alebo jemne ťukne
+      }
+
+      if (Ship.Ek <= 0) {
+        Ship.state = 'paused';
+        hudStatus.className = 'status-fixation';
+        hudStatus.innerText = "☠ SYSTÉM SKOLABOVAL NA ENTROPIU.";
+        hudStatus.style.display = 'block';
+        setTimeout(() => location.reload(), 2000);
+      }
+    }
+  });
+
+  document.getElementById('ui-ek').innerText = Math.max(0, Ship.Ek).toFixed(1);
+  document.getElementById('ui-dt').innerText = Ship.Dt.toFixed(2);
+  
+  if(Ship.state === 'flow') document.getElementById('ui-ek').style.color = '#f0d040';
+  else if(Ship.state === 'fixation') document.getElementById('ui-ek').style.color = '#888888';
+  else document.getElementById('ui-ek').style.color = Ship.Ek > 50 ? '#3ef0a0' : '#f05050';
+}
+
+function draw() {
+  if (!W || !H) resize();
+  
+  if (Ship.state === 'fixation') {
+    ctx.fillStyle = 'rgba(20, 20, 20, 0.7)'; // Sivá, ťažká atmosféra
+  } else if (Ship.state === 'flow') {
+    ctx.fillStyle = 'rgba(5, 10, 25, 0.5)'; // Čistá vesmírna
+  } else {
+    ctx.fillStyle = 'rgba(1, 4, 8, 0.6)'; 
+  }
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.lineWidth = 1.0;
+  backgroundStars.forEach(p => {
+    let dx = p.x - Ship.x, dy = p.y - Ship.y;
+    if (dx > 10000) p.x -= 20000; else if (dx < -10000) p.x += 20000;
+    if (dy > 10000) p.y -= 20000; else if (dy < -10000) p.y += 20000;
+
+    const pt0 = project3D(p.x, p.y, p.z_height);
+    const pt1 = project3D(p.x - Ship.vx*2, p.y - Ship.vy*2, p.z_height); 
+
+    if(pt0.s > 0 && pt1.s > 0) {
+      ctx.strokeStyle = `hsla(210, 30%, 40%, ${pt0.alpha * 0.3})`;
+      ctx.beginPath(); ctx.moveTo(pt0.px, pt0.py); ctx.lineTo(pt1.px, pt1.py); ctx.stroke();
+    }
+  });
+
+  // Vykreslenie hmloviny
+  nebulaParticles.forEach(p => {
+    if(!p.active) return;
+    const pt = project3D(p.x, p.y, 0);
+    if(pt.s > 0) {
+      const radius = p.radius * pt.s;
+      ctx.beginPath(); ctx.arc(pt.px, pt.py, radius, 0, Math.PI*2);
+      
+      if (p.type === 'toxic') {
+        ctx.fillStyle = `rgba(140, 180, 40, ${pt.alpha * 0.4})`; // Zeleno-žltá entropia
+        ctx.strokeStyle = `rgba(180, 220, 50, ${pt.alpha})`;
+      } else {
+        ctx.fillStyle = `rgba(40, 140, 255, ${pt.alpha * 0.4})`; // Čistá modrá energia
+        ctx.strokeStyle = `rgba(100, 200, 255, ${pt.alpha})`;
+      }
+      ctx.fill(); ctx.lineWidth = 2; ctx.stroke();
+    }
+  });
+
+  // Urán
+  const uPt = project3D(Uran.x, Uran.y, 0); 
+  if (uPt.s > 0) {
+    const uRadius = Uran.radius * uPt.s;
+    ctx.beginPath(); ctx.arc(uPt.px, uPt.py, uRadius, 0, Math.PI*2);
+    const uGrd = ctx.createRadialGradient(uPt.px, uPt.py, 0, uPt.px, uPt.py, uRadius);
+    uGrd.addColorStop(0, `rgba(180, 240, 255, ${uPt.alpha})`);
+    uGrd.addColorStop(0.5, `rgba(100, 200, 220, ${uPt.alpha})`);
+    uGrd.addColorStop(1, `rgba(20, 80, 100, ${uPt.alpha})`);
+    ctx.fillStyle = uGrd; ctx.fill();
+  }
+
+  // --- LODE A HUD ---
+  ctx.save();
+  ctx.translate(W/2, H/2 + 100); 
+
+  const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+  const relVelocityAngle = velocityAngle - Ship.angle; 
+  const velMag = Math.sqrt(Ship.vx*Ship.vx + Ship.vy*Ship.vy);
+  
+  ctx.save();
+  ctx.rotate(relVelocityAngle);
+  const driftDisplayDist = Math.min(velMag * 8, 80); 
+  ctx.beginPath();
+  ctx.arc(0, -driftDisplayDist, 6, 0, Math.PI*2);
+  ctx.moveTo(-10, -driftDisplayDist); ctx.lineTo(10, -driftDisplayDist);
+  ctx.moveTo(0, -driftDisplayDist-4); ctx.lineTo(0, -driftDisplayDist-10);
+  
+  if(Ship.state === 'flow') ctx.strokeStyle = 'rgba(240, 208, 64, 1.0)';
+  else if (Ship.state === 'fixation') ctx.strokeStyle = 'rgba(120, 120, 120, 0.8)';
+  else ctx.strokeStyle = 'rgba(240, 208, 64, 0.9)';
+  
+  ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+  
+  const targetAngle = Math.atan2(Uran.y - Ship.y, Uran.x - Ship.x);
+  const relTargetAngle = targetAngle - Ship.angle; 
+  ctx.save();
+  ctx.rotate(relTargetAngle);
+  ctx.beginPath(); ctx.moveTo(0, -65); ctx.lineTo(6, -50); ctx.lineTo(-6, -50); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
+  ctx.restore();
+
+  ctx.rotate(Ship.bankAngle);
+  const scale = 20; 
+  
+  // Filter Shield Vizuál
+  if(Ship.filterActive) {
+    ctx.beginPath();
+    ctx.arc(0, -5, scale * 3.0, 0, Math.PI*2); 
+    ctx.strokeStyle = '#3ef0a0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(62, 240, 160, 0.1)';
+    ctx.fill();
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(0, -scale); ctx.lineTo(scale*0.7, scale); ctx.lineTo(-scale*0.7, scale); ctx.closePath();
+  
+  if (Ship.state === 'flow') {
+    ctx.strokeStyle = '#f0d040'; 
+    ctx.fillStyle = 'rgba(40,30,5,0.9)';
+  } else if (Ship.state === 'fixation') {
+    ctx.strokeStyle = '#666666'; 
+    ctx.fillStyle = 'rgba(30,30,30,0.9)';
+  } else {
+    ctx.strokeStyle = '#40aaff'; 
+    ctx.fillStyle = 'rgba(10,15,25,0.9)';
+  }
+  
+  ctx.lineWidth = 3; ctx.stroke(); ctx.fill();
+
+  if (Ship.thrust > 0) {
+    ctx.beginPath();
+    if (Ship.state === 'flow') {
+      // Laminárny Solid-State lúč (Zlatý a rovný)
+      ctx.moveTo(0, scale*1.2); 
+      ctx.lineTo(scale*0.2, scale*4.0); 
+      ctx.lineTo(-scale*0.2, scale*4.0); 
+      ctx.fillStyle = '#f0d040'; 
+    } else if (Ship.state === 'fixation') {
+      // Dusiaci sa, sivý rozptyl
+      ctx.moveTo(0, scale*1.2); 
+      ctx.lineTo(scale*0.6, scale*2.0 + Math.random()*5); 
+      ctx.lineTo(-scale*0.6, scale*2.0 + Math.random()*5); 
+      ctx.fillStyle = '#888888'; 
+    } else {
+      // Normálny modrý plameň
+      ctx.moveTo(0, scale*1.2); 
+      ctx.lineTo(scale*0.4, scale*2.5 + Math.random()*10); 
+      ctx.lineTo(-scale*0.4, scale*2.5 + Math.random()*10); 
+      ctx.fillStyle = '#40aaff'; 
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  drawControls();
+}
+
+// Fixný časový krok — fyzika 60×/s nezávisle od Hz displeja.
+let _lastT = performance.now(), _acc = 0;
+const STEP = 1 / 60;
+function gameLoop(now) {
+  if (now === undefined) now = performance.now();
+  let f = (now - _lastT) / 1000; _lastT = now;
+  if (!isFinite(f) || f < 0) f = STEP;
+  if (f > 0.25) f = 0.25;
+  _acc += f;
+  let g = 0;
+  try {
+    while (_acc >= STEP && g++ < 5) { updatePhysics(); _acc -= STEP; }
+    draw();
+  } catch (e) { console.error(e); }
+  requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

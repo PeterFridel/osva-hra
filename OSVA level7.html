@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>OSVA: Level 7 - Integrácia (Pluto) v7.3</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000000; color: #e0e8f0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none;
+    padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 20px calc(20px + env(safe-area-inset-left)); }
+  .metric { font-size: 14px; margin-bottom: 8px; letter-spacing: 1px; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
+  .val { font-weight: bold; }
+  
+  .dialog-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(5, 5, 8, 0.95); border: 1px solid #f0d040; padding: 30px;
+    border-radius: 6px; text-align: center; display: none; pointer-events: auto;
+    box-shadow: 0 0 50px rgba(240, 208, 64, 0.2); max-width: 650px; z-index: 100;
+    max-height: 88vh; overflow-y: auto;
+  }
+  .dialog-title { font-size: 18px; margin-bottom: 15px; letter-spacing: 2px; color: #f0d040; text-transform: uppercase; }
+  .dialog-text { font-size: 14px; line-height: 1.6; color: #d0d8e0; margin-bottom: 25px; }
+  button {
+    background: #0a0a0a; border: 1px solid #333; color: #80c0f0;
+    padding: 14px 15px; font-size: 13px; cursor: pointer; border-radius: 4px;
+    font-family: monospace; margin: 6px 0; width: 100%; transition: all 0.2s; text-align: left;
+  }
+  button:hover { background: #111; border-color: #f0d040; box-shadow: 0 0 15px rgba(240,208,64,0.3); }
+  .btn-osva { border-color: #3ef0a0; color: #3ef0a0; }
+  .btn-osva:hover { background: rgba(62,240,160,0.1); border-color: #50ffb0; }
+
+  #legend {
+    position: absolute; bottom: 20px; left: 20px; font-size: 11px; color: #6a8a9a; pointer-events: none;
+    background: rgba(0,0,0,0.8); padding: 10px; border-radius: 4px; border: 1px solid #333;
+  }
+  
+  #warn-hud {
+    position: absolute; top: 120px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; color: #f05050; letter-spacing: 2px; text-align: center;
+    background: rgba(20, 5, 5, 0.9); padding: 15px 30px; border-radius: 4px; border: 1px solid #f05050;
+    text-shadow: 0 0 10px rgba(240, 80, 80, 0.5); display: none;
+  }
+
+  #flow-hud {
+    position: absolute; top: 120px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; color: #f0d040; letter-spacing: 2px; text-align: center;
+    background: rgba(20, 15, 0, 0.9); padding: 15px 30px; border-radius: 4px; border: 1px solid #f0d040;
+    text-shadow: 0 0 15px rgba(240, 208, 64, 0.8); display: none;
+  }
+
+  #fact-hud {
+    position: absolute; top: 180px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; color: #c0d0f0; letter-spacing: 2px; text-align: center;
+    background: rgba(10, 15, 25, 0.9); padding: 15px 30px; border-radius: 4px; border: 1px solid #c0d0f0;
+    text-shadow: 0 0 10px rgba(192, 208, 240, 0.5); display: none; width: 80%; max-width: 800px;
+  }
+
+  #btn-gear {
+    position: absolute; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right));
+    pointer-events: auto; background: #111; border: 1px solid #4a7fa5; color: #cfe4ff;
+    padding: 7px 11px; font-size: 16px; border-radius: 6px; cursor: pointer; width: auto; z-index: 120;
+  }
+  #settings-panel {
+    position: absolute; inset: 0; display: none; z-index: 200; pointer-events: auto;
+    flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px;
+    background: radial-gradient(circle at 50% 40%, rgba(8,16,30,.7), rgba(2,4,8,.96));
+  }
+  #settings-panel.open { display: flex; }
+  #settings-panel .srow { display: flex; align-items: center; gap: 12px; }
+  #settings-panel .srow span { color: #80a0c0; min-width: 92px; text-align: right; font-size: 13px; }
+  #settings-panel button { width: auto; margin: 0; padding: 12px 18px; text-align: center; min-width: 110px; }
+  #set-close { margin-top: 22px; border-color: #3ef0a0; color: #3ef0a0; }
+  @media (max-width: 680px), (pointer: coarse) {
+    #legend { display: none; }
+    .metric { font-size: 12px; margin-bottom: 5px; }
+    .dialog-box { width: calc(100% - 20px); max-width: 480px; padding: 18px; }
+    .dialog-title { font-size: 16px; margin-bottom: 10px; }
+    .dialog-text { font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+    button { padding: 12px; font-size: 12px; }
+    #settings-panel button { padding: 12px 18px; }
+  }
+
+  #error-screen {
+    position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: #400000; color: white; padding: 40px; display: none; z-index: 9999;
+  }
+</style>
+</head>
+<body>
+
+<div id="error-screen"></div>
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-layer">
+  <div style="color:#4a7fa5; font-size: 10px; margin-bottom: 15px; text-transform: uppercase;">L7: OORTOV OBLAK -> PLUTO</div>
+  <div class="metric" style="color: #3ef0a0;">Energia Koherencie: <span id="ui-ek" class="val">100.0</span>%</div>
+  <div class="metric" style="color: #f05050;">Vnútorný Odpor (Dt): <span id="ui-dt" class="val">0.00</span></div>
+  <div class="metric" style="color: #40aaff;">Vzdialenosť na Pluto: <span id="ui-dist" class="val" style="color:#555;">[ZLYHANIE SIGNÁLU]</span></div>
+</div>
+
+<button id="btn-gear" onclick="openSettings()">⚙</button>
+<div id="settings-panel">
+  <div class="srow"><span>Režim</span><button id="set-diff"></button></div>
+  <div class="srow"><span>Ovládanie</span><button id="set-steer"></button></div>
+  <button id="set-close" onclick="closeSettings()">Späť do hry</button>
+</div>
+
+<div id="warn-hud">⚠ ENTROPIA. STRATA KOHERENCIE!</div>
+<div id="flow-hud">✨ REZONANCIA DOSIAHNUTÁ. NAVIGÁCIA AKTÍVNA. ✨</div>
+<div id="fact-hud">Analýza dát Pluta...</div>
+
+<div id="legend">
+  <span style="color:#a050f0;">◎ Pulz:</span> SHIFT (Sken tmy)<br>
+  <span style="color:#3ef0a0;">◖ Štít:</span> Medzerník (Parazit)<br>
+  <span style="color:#40aaff;">◎ Prstence:</span> Pusti klávesnicu (Dobíjanie)<br>
+  <span style="color:#00ffff;">≈ Víchrica:</span> Natoč nos po vetre (Dobíjanie)<br>
+</div>
+
+<div id="start-dialog" class="dialog-box" style="display: block;">
+  <div class="dialog-title">ZÁSAH SYSTÉMU: ABSOLÚTNA INTEGRÁCIA</div>
+  <div class="dialog-text">
+    Si na okraji sústavy. Absolútna tma. Radar stratil cieľ. Vonkajšie prostredie je extrémne nestabilné a útočia na teba všetky vrstvy entropie naraz.<br><br>
+    Hľadanie Pluta naslepo ťa zničí. Jediná cesta je dosiahnuť dokonalú vnútornú koherenciu ($D_t=0$, $E_k>105$). <br><br>
+    <strong>Nové pravidlo:</strong> Prostredie nie je len hrozba, je to zdroj. Správne zosúladenie s víchricami a prstencami ti aktívne dobije energiu potrebnú na dosiahnutie Flow.
+  </div>
+  <button class="btn-osva" style="text-align:center;" onclick="startSimulation()">Prijať výzvu</button>
+</div>
+
+<div id="quiz-dialog" class="dialog-box" style="border-color:#c0d0f0;">
+  <div class="dialog-title" style="color:#c0d0f0;">ZÁVEREČNÁ ANALÝZA DÁT</div>
+  <div class="dialog-text">
+    Skenovanie planétky dokončené.<br><br>
+    <strong>Otázka: Aký vizuálny útvar sa nachádza na povrchu Pluta?</strong>
+  </div>
+  <button onclick="resolveQuiz(0)">1. Veľká červená škvrna</button>
+  <button onclick="resolveQuiz(1)">2. Obrovské srdce zo zamrznutého dusíka (Tombaugh Regio)</button>
+  <button onclick="resolveQuiz(0)">3. Hlboký oceán tekutej vody</button>
+</div>
+
+<div id="win-dialog" class="dialog-box" style="border-color:#f0d040;">
+  <div class="dialog-title" id="win-title" style="color: #f0d040;">OSVA ARCHITEKTÚRA KOMPLETNÁ</div>
+  <div class="dialog-text" id="win-text">
+    Vitaj na Plute.<br><br>
+    Zvládol si všetky vrstvy emočného dekodéra. Hnev, Strach, Smútok aj Šok si premenil na funkčnú koherenciu a Radosť. Si plne kalibrovaný.
+  </div>
+  <button class="btn-osva" style="text-align:center; border-color:#f0d040; color:#f0d040;" onclick="location.reload()">Reštartovať Systém</button>
+</div>
+
+<script>
+window.onerror = function(msg, url, line) {
+  document.getElementById('error-screen').style.display = 'block';
+  document.getElementById('error-screen').innerHTML = `<h2>Kritická chyba:</h2><p>${msg}</p><p>Riadok: ${line}</p>`;
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+let DPR;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize); resize();
+
+let gameSpeed = 0.6;
+let isBeginner = true;
+let menuOpen = false;
+
+const plutoFacts = [
+  "SKENOVANIE DÁT: Rok = 248 pozemských rokov | Polomer = 1 188 km | Vzdialenosť = 39.5 AU",
+  "FAKT: Trpasličia planéta v Kuiperovom páse.",
+  "FAKT: Má obrovské srdce zo zamrznutého dusíka, nazývané Tombaugh Regio.",
+  "FAKT: 5 známych mesiacov. Najväčší, Cháron, je taký veľký, že obiehajú spoločné centrum gravitácie.",
+  "FAKT: Atmosféra sa pri vzdialení od Slnka zmrazí a spadne na povrch ako sneh."
+];
+let factTimer = 0;
+
+const Pluto = { x: 0, y: -70000, radius: 200 }; 
+
+const Ship = {
+  x: 0, y: 0,          
+  vx: 0, vy: -12.0,            
+  angle: -Math.PI/2,               
+  thrust: 0, Ek: 100, Dt: 0,
+  state: 'paused', 
+  bankAngle: 0,
+  shieldActive: false
+};
+
+const pulses = [];
+let pulseCooldown = 0;
+
+const asteroids = [];
+for(let i=0; i<150; i++) {
+  asteroids.push({
+    x: (Math.random()-0.5)*16000, y: -5000 - Math.random()*60000,
+    vx: (Math.random()-0.5)*3, vy: (Math.random()-0.5)*3,
+    radius: 40 + Math.random()*60, revealedTimer: 0
+  });
+}
+
+const Probe = { x: -2000, y: -8000, vx: 0, vy: 0, radius: 40, active: true, resolved: false };
+
+const winds = [
+  { yMin: -20000, yMax: -28000, vx: 40, vy: -5, angle: Math.atan2(-5, 40) }
+];
+
+const RING_OUTER = -35000;
+const RING_INNER = -45000;
+const ringParticles = [];
+for(let i=0; i<800; i++) {
+  ringParticles.push({
+    x: (Math.random()-0.5)*18000, y: RING_INNER + Math.random()*(RING_OUTER - RING_INNER),
+    size: 1 + Math.random()*2, vx: (Math.random()-0.5)*1, vy: (Math.random()-0.5)*1
+  });
+}
+
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if(['Space', 'ShiftLeft', 'ShiftRight', 'KeyF', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ===== MOBILNÉ DOTYKOVÉ OVLÁDANIE + NASTAVENIA (⚙) — 2 akcie: ŠTÍT + PULZ =====
+let steerSide = 'R';
+try { const s = JSON.parse(localStorage.getItem('osva_settings') || '{}');
+  if (s.steerSide) steerSide = s.steerSide;
+  if (typeof s.beginner === 'boolean') { isBeginner = s.beginner; gameSpeed = isBeginner ? 0.6 : 1.0; }
+} catch (e) {}
+const ACTIONS = [{ key: 'Space', glyph: '◈', cap: 'ŠTÍT' }, { key: 'ShiftLeft', glyph: '◎', cap: 'PULZ' }];
+function saveSettings() {
+  try { const s = JSON.parse(localStorage.getItem('osva_settings') || '{}');
+    s.steerSide = steerSide; s.beginner = isBeginner;
+    localStorage.setItem('osva_settings', JSON.stringify(s)); } catch (e) {}
+}
+function refreshPanel() {
+  document.getElementById('set-diff').innerText = isBeginner ? 'Začiatočník' : 'Profík';
+  document.getElementById('set-steer').innerText = steerSide === 'R' ? 'Vpravo' : 'Vľavo';
+}
+function openSettings() { menuOpen = true; document.getElementById('settings-panel').classList.add('open'); refreshPanel(); }
+function closeSettings() { menuOpen = false; document.getElementById('settings-panel').classList.remove('open'); }
+document.getElementById('set-diff').addEventListener('click', function () { isBeginner = !isBeginner; gameSpeed = isBeginner ? 0.6 : 1.0; saveSettings(); refreshPanel(); });
+document.getElementById('set-steer').addEventListener('click', function () { steerSide = (steerSide === 'R' ? 'L' : 'R'); saveSettings(); refreshPanel(); });
+function ctrlZones() {
+  const r = Math.max(34, Math.min(W, H) * 0.085);
+  const pad = r * 0.9 + 16, by = H - r - 22, gap = r * 2.3;
+  const right = steerSide === 'R';
+  const sx = right ? W - pad - r : pad + r, dir = right ? -1 : 1;
+  const a = { x: sx, y: by }, b = { x: sx + dir * gap, y: by };
+  let Lb, Rb; if (a.x < b.x) { Lb = a; Rb = b; } else { Lb = b; Rb = a; }
+  const tx = right ? pad + r : W - pad - r;
+  const actions = ACTIONS.map(function (A, i) { return { x: tx, y: by - ((i + 1) * (2 * r + 22)), key: A.key, glyph: A.glyph, cap: A.cap }; });
+  return { Lb, Rb, thrust: { x: tx, y: by }, actions, r };
+}
+function refreshTouch(e) {
+  e.preventDefault();
+  const z = ctrlZones(), hit = z.r * 1.3;
+  keys['ArrowLeft'] = keys['ArrowRight'] = keys['ArrowUp'] = false;
+  z.actions.forEach(function (a) { keys[a.key] = false; });
+  for (const t of e.touches) {
+    const x = t.clientX, y = t.clientY; let done = false;
+    for (const a of z.actions) { if (Math.hypot(x - a.x, y - a.y) < hit) { keys[a.key] = true; done = true; break; } }
+    if (done) continue;
+    if (Math.hypot(x - z.thrust.x, y - z.thrust.y) < hit) keys['ArrowUp'] = true;
+    else if (Math.hypot(x - z.Lb.x, y - z.Lb.y) < hit) keys['ArrowLeft'] = true;
+    else if (Math.hypot(x - z.Rb.x, y - z.Rb.y) < hit) keys['ArrowRight'] = true;
+  }
+}
+['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function (ev) { canvas.addEventListener(ev, refreshTouch, { passive: false }); });
+function drawControls() {
+  if (Ship.state === 'landed') return;
+  const z = ctrlZones();
+  function b(c, g, on, cap) {
+    ctx.beginPath(); ctx.arc(c.x, c.y, z.r, 0, Math.PI * 2);
+    ctx.fillStyle = on ? 'rgba(62,240,160,0.22)' : 'rgba(20,30,45,0.30)'; ctx.fill();
+    ctx.strokeStyle = on ? '#3ef0a0' : 'rgba(120,160,200,0.5)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = on ? '#3ef0a0' : '#9fb8d0'; ctx.font = Math.round(z.r * 0.9) + 'px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g, c.x, c.y + 1);
+    if (cap) { ctx.font = '10px monospace'; ctx.fillStyle = '#7186a0'; ctx.fillText(cap, c.x, c.y + z.r + 11); }
+  }
+  b(z.Lb, '◀', keys['ArrowLeft']); b(z.Rb, '▶', keys['ArrowRight']); b(z.thrust, '▲', keys['ArrowUp']);
+  z.actions.forEach(function (a) { b(a, a.glyph, keys[a.key], a.cap); });
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+let backgroundStars = [];
+for(let i=0; i<300; i++) { backgroundStars.push({ x: (Math.random()-0.5)*30000, y: (Math.random()-0.5)*30000, z_height: (Math.random()-0.5)*10000 }); }
+
+function project3D(x, y, z_height) {
+  const dx = x - Ship.x, dy = y - Ship.y;
+  const cosA = Math.cos(Ship.angle), sinA = Math.sin(Ship.angle);
+  const depth = dx * cosA + dy * sinA;
+  const right = dx * (-sinA) + dy * cosA;
+  const camZ = depth + 400; 
+  if (camZ < 10) return { s: -1 }; 
+  const scale = 700 / camZ;
+  return { px: W/2 + right * scale, py: H/2 - (z_height - 100) * scale, s: scale, alpha: parseFloat(Math.max(0, Math.min(1, 1 - (camZ / 18000))).toFixed(2)) };
+}
+
+function startSimulation() {
+  document.getElementById('start-dialog').style.display = 'none';
+  Ship.state = 'flying';
+}
+
+function resolveQuiz(isCorrect) {
+  document.getElementById('quiz-dialog').style.display = 'none';
+  const winText = document.getElementById('win-text');
+  if (isCorrect === 1) {
+    Ship.Ek = Math.min(150, Ship.Ek + 50);
+    winText.innerHTML = `<strong>Dáta overené.</strong><br><br>Dosiahol si absolútnu integráciu a prešiel si celým spektrom OSVA emočného dekodéra bez straty koherencie.`;
+  } else {
+    winText.innerHTML = `<strong>Nesprávne dáta.</strong><br><br>Integrácia úspešná, no analýza Pluta zlyhala.`;
+  }
+  Ship.state = 'landed';
+  document.getElementById('win-dialog').style.display = 'block';
+  document.getElementById('fact-hud').style.display = 'none';
+}
+
+function updatePhysics() {
+  if (menuOpen || Ship.state === 'paused' || Ship.state === 'landed' || Ship.state === 'quiz') return;
+
+  const dxP = Pluto.x - Ship.x, dyP = Pluto.y - Ship.y;
+  const distP = Math.sqrt(dxP*dxP + dyP*dyP);
+
+  // Flow State check
+  let isInFlow = (Ship.Dt === 0 && Ship.Ek >= 105);
+  
+  const uiDist = document.getElementById('ui-dist');
+  if (isInFlow) {
+    uiDist.innerText = Math.floor(distP) + " km";
+    uiDist.style.color = "#f0d040";
+    document.getElementById('flow-hud').style.display = 'block';
+  } else {
+    uiDist.innerText = "[ZLYHANIE SIGNÁLU]";
+    uiDist.style.color = "#555";
+    document.getElementById('flow-hud').style.display = 'none';
+  }
+
+  if (distP < Pluto.radius + 600 && isInFlow) {
+    Ship.state = 'quiz';
+    document.getElementById('quiz-dialog').style.display = 'block';
+    return;
+  }
+
+  let targetBank = 0;
+  Ship.thrust = 0;
+  Ship.shieldActive = keys['Space'];
+
+  if ((keys['ShiftLeft'] || keys['ShiftRight']) && pulseCooldown === 0) {
+    pulses.push({ x: Ship.x, y: Ship.y, radius: 0, maxRadius: 3500, alpha: 1.0 });
+    pulseCooldown = 60; 
+  }
+  if (pulseCooldown > 0) pulseCooldown--;
+
+  let isTryingToControl = (keys['ArrowUp'] || keys['ArrowLeft'] || keys['ArrowRight']);
+  let activeWind = null;
+  winds.forEach(w => { if (Ship.y < w.yMin && Ship.y > w.yMax) activeWind = w; });
+  let inRings = (Ship.y < RING_OUTER && Ship.y > RING_INNER);
+
+  if (isInFlow && distP < 15000) {
+    const targetA = Math.atan2(dyP, dxP);
+    let diff = targetA - Ship.angle;
+    while(diff < -Math.PI) diff += 2*Math.PI;
+    while(diff > Math.PI) diff -= 2*Math.PI;
+    Ship.angle += diff * 0.15;
+    Ship.vx += (Math.cos(targetA) * 6.0 - Ship.vx) * 0.08 * gameSpeed;
+    Ship.vy += (Math.sin(targetA) * 6.0 - Ship.vy) * 0.08 * gameSpeed;
+    Ship.thrust = 0.5;
+
+    factTimer += gameSpeed;
+    let factIndex = Math.floor(factTimer / 300); 
+    if (factIndex >= plutoFacts.length) factIndex = plutoFacts.length - 1; 
+    const factHud = document.getElementById('fact-hud');
+    factHud.innerText = plutoFacts[factIndex];
+    factHud.style.display = 'block';
+  } else {
+    if (keys['ArrowLeft']) { Ship.angle -= 0.06; targetBank = -0.4; }
+    if (keys['ArrowRight']) { Ship.angle += 0.06; targetBank = 0.4; }
+    if (keys['ArrowUp']) Ship.thrust = 0.5;
+
+    let struggling = false;
+
+    // Prstence (Zero Input) - TERAŽ DOBÍJAJÚ ENERGIU
+    if (inRings) {
+      if (isTryingToControl) {
+        Ship.Dt += 0.1; Ship.Ek -= 0.5;
+        Ship.vx += (Math.random() - 0.5) * 2; Ship.vy += (Math.random() - 0.5) * 2;
+        struggling = true;
+      } else {
+        Ship.Dt = Math.max(0, Ship.Dt - 0.05);
+        if (Ship.Ek < 150) Ship.Ek += 0.15 * gameSpeed; // Dobíjanie
+        
+        Ship.vy -= 0.2; // Jemný drift vpred
+        const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+        let diff = velocityAngle - Ship.angle;
+        while(diff < -Math.PI) diff += 2*Math.PI;
+        while(diff > Math.PI) diff -= 2*Math.PI;
+        Ship.angle += diff * 0.05;
+      }
+    }
+    // Víchrica - TERAZ DOBÍJA ENERGIU PRI ZOSÚLADENÍ
+    else if (activeWind) {
+      Ship.vx += (activeWind.vx - Ship.vx) * 0.02 * gameSpeed;
+      Ship.vy += (activeWind.vy - Ship.vy) * 0.02 * gameSpeed;
+      
+      if (keys['ArrowUp']) {
+        const dotProduct = Math.cos(Ship.angle) * (activeWind.vx/40) + Math.sin(Ship.angle) * (activeWind.vy/40);
+        if (dotProduct < 0) { 
+          struggling = true; 
+          Ship.Dt += 0.15; 
+          Ship.Ek -= 0.5; 
+        } else if (dotProduct > 0.8) {
+          Ship.Dt = Math.max(0, Ship.Dt - 0.05);
+          if (Ship.Ek < 150) Ship.Ek += 0.15 * gameSpeed; // Dobíjanie pri ťahu po vetre
+        }
+      } else {
+        Ship.Dt = Math.max(0, Ship.Dt - 0.05);
+        if (Ship.Ek < 150) Ship.Ek += 0.15 * gameSpeed; // Dobíjanie pri pasívnom nesení sa
+      }
+    }
+
+    if (struggling) {
+      document.getElementById('warn-hud').innerText = "⚠ ODPOR! STRATA KOHERENCIE!";
+      document.getElementById('warn-hud').style.display = 'block';
+    } else {
+      document.getElementById('warn-hud').style.display = 'none';
+      if (!inRings || isTryingToControl) {
+        Ship.vx += Math.cos(Ship.angle) * Ship.thrust * gameSpeed; 
+        Ship.vy += Math.sin(Ship.angle) * Ship.thrust * gameSpeed;
+      }
+    }
+    Ship.vx *= 0.995; Ship.vy *= 0.995; 
+  }
+
+  Ship.bankAngle += (targetBank - Ship.bankAngle) * 0.1; 
+  Ship.x += Ship.vx * gameSpeed; 
+  Ship.y += Ship.vy * gameSpeed;
+
+  for (let i = pulses.length - 1; i >= 0; i--) {
+    let p = pulses[i];
+    p.radius += 50 * gameSpeed; p.alpha -= 0.02 * gameSpeed;
+    if (p.alpha <= 0 || p.radius >= p.maxRadius) pulses.splice(i, 1);
+  }
+
+  asteroids.forEach(a => {
+    a.x += a.vx * gameSpeed; a.y += a.vy * gameSpeed;
+    if (a.revealedTimer > 0) a.revealedTimer -= 1 * gameSpeed;
+    pulses.forEach(p => {
+      if (Math.abs(Math.sqrt((a.x - p.x)**2 + (a.y - p.y)**2) - p.radius) < 100) a.revealedTimer = 180; 
+    });
+    if (Math.sqrt((a.x - Ship.x)**2 + (a.y - Ship.y)**2) < a.radius + 20) {
+      Ship.Ek -= 15; Ship.Dt += 0.2;
+      Ship.vx = -Ship.vx * 0.5 + a.vx; Ship.vy = -Ship.vy * 0.5 + a.vy;
+      a.revealedTimer = 60; 
+    }
+  });
+
+  // Parazit
+  if (Probe.active && !Probe.resolved) {
+    if (Ship.y < -5000 && Ship.y > -15000) {
+      const angleToShip = Math.atan2(Ship.y - Probe.y, Ship.x - Probe.x);
+      const baseSpeed = Math.sqrt(Ship.vx*Ship.vx + Ship.vy*Ship.vy) + 5;
+      Probe.vx += (Math.cos(angleToShip) * baseSpeed * gameSpeed - Probe.vx) * 0.05;
+      Probe.vy += (Math.sin(angleToShip) * baseSpeed * gameSpeed - Probe.vy) * 0.05;
+      Probe.x += Probe.vx * gameSpeed; Probe.y += Probe.vy * gameSpeed;
+
+      const dxPr = Probe.x - Ship.x, dyPr = Probe.y - Ship.y;
+      if (Math.sqrt(dxPr*dxPr + dyPr*dyPr) < Probe.radius + 40) {
+        const angleToProbe = Math.atan2(dyPr, dxPr);
+        let angleDiff = Math.abs(angleToProbe - Ship.angle);
+        while(angleDiff > Math.PI) angleDiff -= 2*Math.PI;
+        
+        if (Ship.shieldActive && Math.abs(angleDiff) < 0.8) {
+          Probe.resolved = true; Ship.Ek = Math.min(150, Ship.Ek + 20); 
+          Probe.vx = Math.cos(angleToProbe) * 20; Probe.vy = Math.sin(angleToProbe) * 20;
+        } else {
+          Ship.Ek -= 20; Ship.Dt += 0.5;
+          Ship.vx += Probe.vx * 0.5; Ship.vy += Probe.vy * 0.5;
+          Probe.vx = -Probe.vx * 1.5; Probe.vy = -Probe.vy * 1.5;
+          Probe.x += Probe.vx * 5; Probe.y += Probe.vy * 5;
+        }
+      }
+    } else {
+      Probe.y = Ship.y - 4000; Probe.x = Ship.x + 2000;
+    }
+  } else if (Probe.resolved) {
+    Probe.x += Probe.vx; Probe.y += Probe.vy;
+  }
+
+  ringParticles.forEach(rp => { rp.x += rp.vx; rp.y += rp.vy; }); 
+
+  if (Ship.Ek <= 0) {
+    Ship.state = 'paused';
+    document.getElementById('warn-hud').innerText = "☠ ABSOLÚTNA ENTROPIA. REŠTARTUJEM...";
+    document.getElementById('warn-hud').style.display = 'block';
+    setTimeout(() => location.reload(), 2000);
+  }
+
+  document.getElementById('ui-ek').innerText = Math.max(0, Ship.Ek).toFixed(1);
+  document.getElementById('ui-dt').innerText = Ship.Dt.toFixed(2);
+  if (isInFlow) document.getElementById('ui-ek').style.color = '#f0d040';
+  else document.getElementById('ui-ek').style.color = Ship.Ek > 50 ? '#3ef0a0' : '#f05050';
+}
+
+function draw() {
+  if (!W || !H) resize();
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; 
+  ctx.fillRect(0, 0, W, H);
+
+  const isInFlow = (Ship.Dt === 0 && Ship.Ek >= 105);
+
+  ctx.lineWidth = 1.0;
+  backgroundStars.forEach((p) => {
+    let dx = p.x - Ship.x, dy = p.y - Ship.y;
+    if (dx > 15000) p.x -= 30000; else if (dx < -15000) p.x += 30000;
+    if (dy > 15000) p.y -= 30000; else if (dy < -15000) p.y += 30000;
+
+    const pt0 = project3D(p.x, p.y, p.z_height);
+    const pt1 = project3D(p.x - Ship.vx*2, p.y - Ship.vy*2, p.z_height); 
+
+    if(pt0.s > 0 && pt1.s > 0) {
+      ctx.strokeStyle = `hsla(210, 10%, 20%, ${pt0.alpha * 0.1})`; 
+      ctx.beginPath(); ctx.moveTo(pt0.px, pt0.py); ctx.lineTo(pt1.px, pt1.py); ctx.stroke();
+    }
+  });
+
+  pulses.forEach(p => {
+    const pt = project3D(p.x, p.y, 0);
+    if(pt.s > 0) {
+      ctx.beginPath(); ctx.arc(pt.px, pt.py, p.radius * pt.s, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(160, 80, 240, ${p.alpha})`; ctx.lineWidth = 2; ctx.stroke();
+    }
+  });
+
+  asteroids.forEach(a => {
+    const pt = project3D(a.x, a.y, 0);
+    if(pt.s > 0) {
+      const radius = a.radius * pt.s;
+      let alpha = a.revealedTimer > 0 ? (a.revealedTimer / 180) : 0.02;
+      ctx.beginPath(); ctx.arc(pt.px, pt.py, radius, 0, Math.PI*2);
+      if (a.revealedTimer > 0 || isInFlow) {
+        ctx.fillStyle = `rgba(160, 80, 240, ${alpha * pt.alpha})`;
+        ctx.strokeStyle = `rgba(220, 200, 255, ${alpha * pt.alpha})`;
+        ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
+      } else {
+        ctx.fillStyle = `rgba(5, 5, 5, ${pt.alpha})`;
+        ctx.strokeStyle = `rgba(15, 15, 15, ${pt.alpha})`;
+        ctx.lineWidth = 1; ctx.fill(); ctx.stroke();
+      }
+    }
+  });
+
+  ringParticles.forEach(rp => {
+    const pt = project3D(rp.x, rp.y, 0);
+    if (pt.s > 0) {
+      ctx.beginPath(); ctx.arc(pt.px, pt.py, rp.size * pt.s, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(80, 120, 160, ${pt.alpha * 0.5})`; ctx.fill();
+    }
+  });
+
+  if (Probe.active) {
+    const pt = project3D(Probe.x, Probe.y, 0);
+    if(pt.s > 0) {
+      ctx.beginPath(); ctx.arc(pt.px, pt.py, Probe.radius * pt.s, 0, Math.PI*2);
+      if (Probe.resolved) {
+        ctx.fillStyle = `rgba(100, 150, 200, ${pt.alpha})`; ctx.fill();
+      } else {
+        ctx.fillStyle = `rgba(255, 40, 40, ${pt.alpha})`; ctx.fill();
+        ctx.beginPath(); ctx.arc(pt.px, pt.py, Probe.radius * pt.s * 1.5, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(255, 40, 40, ${pt.alpha * 0.3})`; ctx.fill();
+      }
+    }
+  }
+
+  if (isInFlow) {
+    const pPt = project3D(Pluto.x, Pluto.y, 0); 
+    if (pPt.s > 0) {
+      const pRadius = Pluto.radius * pPt.s;
+      ctx.beginPath(); ctx.arc(pPt.px, pPt.py, pRadius, 0, Math.PI*2);
+      const pGrd = ctx.createRadialGradient(pPt.px, pPt.py, 0, pPt.px, pPt.py, pRadius);
+      pGrd.addColorStop(0, `rgba(220, 200, 180, ${pPt.alpha})`);
+      pGrd.addColorStop(1, `rgba(80, 60, 50, ${pPt.alpha})`);
+      ctx.fillStyle = pGrd; ctx.fill();
+    }
+  }
+
+  ctx.save();
+  ctx.translate(W/2, H/2 + 100); 
+
+  const velocityAngle = Math.atan2(Ship.vy, Ship.vx);
+  const relVelocityAngle = velocityAngle - Ship.angle; 
+  const velMag = Math.sqrt(Ship.vx*Ship.vx + Ship.vy*Ship.vy);
+  
+  ctx.save();
+  ctx.rotate(relVelocityAngle);
+  const driftDisplayDist = Math.min(velMag * 8, 80); 
+  ctx.beginPath();
+  ctx.arc(0, -driftDisplayDist, 6, 0, Math.PI*2);
+  ctx.moveTo(-10, -driftDisplayDist); ctx.lineTo(10, -driftDisplayDist);
+  ctx.moveTo(0, -driftDisplayDist-4); ctx.lineTo(0, -driftDisplayDist-10);
+  ctx.strokeStyle = isInFlow ? 'rgba(240, 208, 64, 1)' : 'rgba(100, 100, 100, 0.9)'; 
+  ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+  
+  if (isInFlow) {
+    const targetAngle = Math.atan2(Pluto.y - Ship.y, Pluto.x - Ship.x);
+    const relTargetAngle = targetAngle - Ship.angle; 
+    ctx.save();
+    ctx.rotate(relTargetAngle);
+    ctx.beginPath(); ctx.moveTo(0, -65); ctx.lineTo(6, -50); ctx.lineTo(-6, -50); ctx.closePath();
+    ctx.fillStyle = 'rgba(240,208,64,0.9)'; ctx.fill();
+    ctx.restore();
+  }
+
+  if (Probe.active && !Probe.resolved) {
+    const threatAngle = Math.atan2(Probe.y - Ship.y, Probe.x - Ship.x);
+    const relThreatAngle = threatAngle - Ship.angle; 
+    ctx.save();
+    ctx.rotate(relThreatAngle);
+    ctx.beginPath(); ctx.moveTo(0, -75); ctx.lineTo(8, -85); ctx.lineTo(-8, -85); ctx.closePath();
+    ctx.fillStyle = 'rgba(255,40,40,0.9)'; ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.rotate(Ship.bankAngle);
+  const scale = 20; 
+  
+  if(Ship.shieldActive) {
+    ctx.beginPath(); ctx.arc(0, -5, scale * 2.5, Math.PI, 0); 
+    ctx.strokeStyle = '#3ef0a0'; ctx.lineWidth = 4; ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(0, -scale); ctx.lineTo(scale*0.7, scale); ctx.lineTo(-scale*0.7, scale); ctx.closePath();
+  ctx.strokeStyle = isInFlow ? '#f0d040' : (Ship.Dt > 0.5 ? '#f05050' : '#40aaff'); 
+  ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = 'rgba(5,5,10,0.9)'; ctx.fill();
+
+  if (Ship.thrust > 0) {
+    ctx.beginPath();
+    if (isInFlow) {
+      ctx.moveTo(0, scale*1.2); ctx.lineTo(scale*0.2, scale*5.0); ctx.lineTo(-scale*0.2, scale*5.0); 
+      ctx.fillStyle = '#f0d040'; 
+    } else {
+      ctx.moveTo(0, scale*1.2); ctx.lineTo(scale*0.4, scale*2.5 + Math.random()*10); ctx.lineTo(-scale*0.4, scale*2.5 + Math.random()*10); 
+      ctx.fillStyle = Ship.Dt > 0.5 ? '#f05050' : '#40aaff'; 
+    }
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+
+  drawControls();
+}
+
+// Fixný časový krok — fyzika 60×/s nezávisle od Hz displeja.
+let _lastT = performance.now(), _acc = 0;
+const STEP = 1 / 60;
+function gameLoop(now) {
+  if (now === undefined) now = performance.now();
+  let f = (now - _lastT) / 1000; _lastT = now;
+  if (!isFinite(f) || f < 0) f = STEP;
+  if (f > 0.25) f = 0.25;
+  _acc += f;
+  let g = 0;
+  try {
+    while (_acc >= STEP && g++ < 5) { updatePhysics(); _acc -= STEP; }
+    draw();
+  } catch (e) {
+    document.getElementById('error-screen').style.display = 'block';
+    document.getElementById('error-screen').innerHTML = `<h2>Kritická chyba enginu:</h2><p>${e.message}</p>`;
+    console.error(e);
+  }
+  requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+
+gameLoop();
+</script>
+</body>
+</html>
